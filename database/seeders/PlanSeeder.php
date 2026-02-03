@@ -21,7 +21,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Starter',
                 'slug' => 'starter',
                 'description' => 'Perfect for small businesses and WhatsApp sellers getting started online.',
-                'monthly_price' => null, // Yearly only
+                'monthly_price' => 0, // Yearly only - no monthly option
                 'yearly_price' => 59,
                 'currency' => 'USD',
                 'trial_days' => 7,
@@ -58,7 +58,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Growth',
                 'slug' => 'growth',
                 'description' => 'For growing businesses ready to scale their online presence.',
-                'monthly_price' => null, // Yearly only
+                'monthly_price' => 0, // Yearly only - no monthly option
                 'yearly_price' => 89,
                 'currency' => 'USD',
                 'trial_days' => 7,
@@ -95,7 +95,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Pro',
                 'slug' => 'professional',
                 'description' => 'For established businesses with high volume sales.',
-                'monthly_price' => null, // Yearly only
+                'monthly_price' => 0, // Yearly only - no monthly option
                 'yearly_price' => 129,
                 'currency' => 'USD',
                 'trial_days' => 7,
