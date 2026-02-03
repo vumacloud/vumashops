@@ -62,7 +62,7 @@ All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day f
                           ▼
 ┌─────────────────────────────────────────────────────┐
 │           DigitalOcean Droplet                       │
-│              138.68.88.56                            │
+│              164.92.184.13                            │
 │         shops.vumacloud.com                          │
 │         demoshop.vumacloud.com                       │
 │         + all vendor custom domains                  │
@@ -90,13 +90,13 @@ All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day f
 
 ## Deployment
 
-### Server: 138.68.88.56
+### Server: 164.92.184.13
 
 ### Quick Setup
 
 ```bash
 # SSH into server
-ssh root@138.68.88.56
+ssh root@164.92.184.13
 
 # Clone and setup
 cd /var/www
@@ -175,12 +175,12 @@ MYSQL_ATTR_SSL_CA=/etc/ssl/certs/ca-certificates.crt
 # Domain config
 VUMASHOPS_PLATFORM_DOMAIN=shops.vumacloud.com
 VUMASHOPS_DEMO_DOMAIN=demoshop.vumacloud.com
-VUMASHOPS_SERVER_IP=138.68.88.56
+VUMASHOPS_SERVER_IP=164.92.184.13
 TENANCY_CENTRAL_DOMAINS=shops.vumacloud.com,demoshop.vumacloud.com
 
 # Cloudflare (for vendor domain automation)
 CLOUDFLARE_API_TOKEN=xxx
-CLOUDFLARE_SERVER_IP=138.68.88.56
+CLOUDFLARE_SERVER_IP=164.92.184.13
 
 # Brevo (email)
 BREVO_API_KEY=xxx

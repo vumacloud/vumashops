@@ -4,38 +4,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Email Provider - Brevo (formerly Sendinblue)
+    | Email Provider - Brevo SMTP (formerly Sendinblue)
     |--------------------------------------------------------------------------
+    | Email is sent via Laravel's built-in Mail facade using SMTP.
+    | Configure SMTP settings in .env:
+    | MAIL_MAILER=smtp
+    | MAIL_HOST=smtp-relay.brevo.com
+    | MAIL_PORT=587
+    | MAIL_USERNAME=your-brevo-smtp-login
+    | MAIL_PASSWORD=your-brevo-smtp-password
+    | MAIL_ENCRYPTION=tls
     */
 
     'email' => [
-        'provider' => 'brevo',
+        'provider' => 'smtp',
         'enabled' => true,
-
-        'brevo' => [
-            'api_key' => env('BREVO_API_KEY'),
-            'from_email' => env('MAIL_FROM_ADDRESS', 'noreply@vumacloud.com'),
-            'from_name' => env('MAIL_FROM_NAME', 'VumaShops'),
-            'reply_to' => env('MAIL_REPLY_TO', 'support@vumacloud.com'),
-        ],
-
-        'templates' => [
-            'welcome' => 1,
-            'order_confirmation' => 2,
-            'order_shipped' => 3,
-            'order_delivered' => 4,
-            'order_cancelled' => 5,
-            'password_reset' => 6,
-            'email_verification' => 7,
-            'payment_received' => 8,
-            'payment_failed' => 9,
-            'subscription_activated' => 10,
-            'subscription_expired' => 11,
-            'subscription_renewed' => 12,
-            'low_stock_alert' => 13,
-            'new_order_admin' => 14,
-            'refund_processed' => 15,
-        ],
+        'from_email' => env('MAIL_FROM_ADDRESS', 'noreply@vumacloud.com'),
+        'from_name' => env('MAIL_FROM_NAME', 'VumaShops'),
+        'reply_to' => env('MAIL_REPLY_TO', 'support@vumacloud.com'),
     ],
 
     /*
