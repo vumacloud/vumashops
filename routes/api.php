@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\WhmcsProvisioningController;
 
 /*
 |--------------------------------------------------------------------------
@@ -98,4 +99,42 @@ Route::prefix('webhooks')->group(function () {
     Route::post('/mpesa/tanzania', [PaymentController::class, 'mpesaTanzaniaWebhook']);
     Route::post('/mtn-momo', [PaymentController::class, 'mtnMomoWebhook']);
     Route::post('/airtel-money', [PaymentController::class, 'airtelMoneyWebhook']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| WHMCS Provisioning API
+|--------------------------------------------------------------------------
+|
+| These endpoints are called by WHMCS to provision, suspend, unsuspend,
+| and terminate VumaShops stores. Protected by API key authentication.
+|
+| Configure WHMCS_API_KEY in .env
+|
+*/
+Route::prefix('whmcs')->middleware(\App\Http\Middleware\VerifyWhmcsApiKey::class)->group(function () {
+    // Create new store (on order activation)
+    Route::post('/create', [WhmcsProvisioningController::class, 'create']);
+
+    // Suspend store (non-payment, abuse, etc.)
+    Route::post('/suspend', [WhmcsProvisioningController::class, 'suspend']);
+
+    // Unsuspend store (payment received, etc.)
+    Route::post('/unsuspend', [WhmcsProvisioningController::class, 'unsuspend']);
+
+    // Terminate store (cancellation)
+    Route::post('/terminate', [WhmcsProvisioningController::class, 'terminate']);
+
+    // Change plan (upgrade/downgrade)
+    Route::post('/change-plan', [WhmcsProvisioningController::class, 'changePlan']);
+
+    // Renew subscription
+    Route::post('/renew', [WhmcsProvisioningController::class, 'renew']);
+
+    // Get store status
+    Route::post('/status', [WhmcsProvisioningController::class, 'status']);
+    Route::get('/status', [WhmcsProvisioningController::class, 'status']);
+
+    // Update store details
+    Route::post('/update', [WhmcsProvisioningController::class, 'update']);
 });

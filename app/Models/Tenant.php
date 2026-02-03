@@ -40,6 +40,10 @@ class Tenant extends Model
         'is_active',
         'settings',
         'metadata',
+        'whmcs_service_id',
+        'whmcs_client_id',
+        'suspended_at',
+        'suspension_reason',
     ];
 
     protected $casts = [
@@ -48,6 +52,7 @@ class Tenant extends Model
         'metadata' => 'array',
         'subscription_ends_at' => 'datetime',
         'trial_ends_at' => 'datetime',
+        'suspended_at' => 'datetime',
     ];
 
     protected $attributes = [
@@ -128,6 +133,33 @@ class Tenant extends Model
         return $this->subscription_status === 'trial' &&
                $this->trial_ends_at &&
                $this->trial_ends_at->isFuture();
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->subscription_status === 'suspended' || $this->suspended_at !== null;
+    }
+
+    public function suspend(string $reason = null): self
+    {
+        $this->update([
+            'subscription_status' => 'suspended',
+            'suspended_at' => now(),
+            'suspension_reason' => $reason,
+            'is_active' => false,
+        ]);
+        return $this;
+    }
+
+    public function unsuspend(): self
+    {
+        $this->update([
+            'subscription_status' => 'active',
+            'suspended_at' => null,
+            'suspension_reason' => null,
+            'is_active' => true,
+        ]);
+        return $this;
     }
 
     public function isSubscriptionActive(): bool
