@@ -14,8 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             PlanSeeder::class,
             SuperAdminSeeder::class,
-            // Add demo data seeders if needed
-            // DemoTenantSeeder::class,
+            DemoShopSeeder::class, // Creates demo store at demoshop.vumacloud.com
         ]);
     }
 }

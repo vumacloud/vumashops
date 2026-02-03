@@ -14,9 +14,9 @@ return [
 
         'brevo' => [
             'api_key' => env('BREVO_API_KEY'),
-            'from_email' => env('MAIL_FROM_ADDRESS', 'noreply@vumashops.com'),
+            'from_email' => env('MAIL_FROM_ADDRESS', 'noreply@vumacloud.com'),
             'from_name' => env('MAIL_FROM_NAME', 'VumaShops'),
-            'reply_to' => env('MAIL_REPLY_TO', 'support@vumashops.com'),
+            'reply_to' => env('MAIL_REPLY_TO', 'support@vumacloud.com'),
         ],
 
         'templates' => [
