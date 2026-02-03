@@ -9,6 +9,9 @@ class PlanSeeder extends Seeder
 {
     /**
      * Run the database seeds.
+     *
+     * VumaShops by VumaCloud - All plans have 7-day free trial
+     * ALL vendors MUST use custom domains (no vumacloud.com subdomains)
      */
     public function run(): void
     {
@@ -20,7 +23,7 @@ class PlanSeeder extends Seeder
                 'monthly_price' => 29,
                 'yearly_price' => 290,
                 'currency' => 'USD',
-                'trial_days' => 14,
+                'trial_days' => 7, // 7-day free trial
                 'is_active' => true,
                 'is_featured' => false,
                 'sort_order' => 1,
@@ -32,19 +35,22 @@ class PlanSeeder extends Seeder
                     'orders' => 100,
                     'staff_accounts' => 2,
                     'storage_mb' => 500,
-                    'custom_domain' => false,
+                    'custom_domain' => true, // REQUIRED - all vendors use custom domains
                     'api_access' => false,
                     'priority_support' => false,
                     'analytics' => 'basic',
+                    'themes' => ['starter', 'minimal'], // Available themes
                 ],
                 'features' => [
-                    'Basic storefront',
+                    'Custom domain (required)',
+                    'Basic storefront themes',
                     'Mobile responsive design',
                     'M-Pesa integration',
-                    'Email notifications',
-                    'SMS notifications',
+                    'Email notifications (Brevo)',
+                    'SMS notifications (Africa\'s Talking)',
                     'Basic analytics',
                     'Email support',
+                    'SSL certificate included',
                 ],
             ],
             [
@@ -54,7 +60,7 @@ class PlanSeeder extends Seeder
                 'monthly_price' => 79,
                 'yearly_price' => 790,
                 'currency' => 'USD',
-                'trial_days' => 14,
+                'trial_days' => 7, // 7-day free trial
                 'is_active' => true,
                 'is_featured' => true,
                 'sort_order' => 2,
@@ -66,20 +72,22 @@ class PlanSeeder extends Seeder
                     'orders' => 1000,
                     'staff_accounts' => 5,
                     'storage_mb' => 2000,
-                    'custom_domain' => true,
+                    'custom_domain' => true, // REQUIRED
                     'api_access' => true,
                     'priority_support' => true,
                     'analytics' => 'advanced',
+                    'themes' => ['starter', 'minimal', 'modern', 'boutique', 'electronics'],
                 ],
                 'features' => [
                     'Everything in Starter',
-                    'Custom domain',
+                    'All premium themes',
                     'All payment gateways',
                     'Advanced analytics',
                     'API access',
                     'Priority support',
                     'Discount codes',
                     'Abandoned cart recovery',
+                    'Cloudflare CDN',
                 ],
             ],
             [
@@ -89,7 +97,7 @@ class PlanSeeder extends Seeder
                 'monthly_price' => 199,
                 'yearly_price' => 1990,
                 'currency' => 'USD',
-                'trial_days' => 14,
+                'trial_days' => 7, // 7-day free trial
                 'is_active' => true,
                 'is_featured' => false,
                 'sort_order' => 3,
@@ -101,15 +109,17 @@ class PlanSeeder extends Seeder
                     'orders' => 10000,
                     'staff_accounts' => 15,
                     'storage_mb' => 10000,
-                    'custom_domain' => true,
+                    'custom_domain' => true, // REQUIRED
                     'api_access' => true,
                     'priority_support' => true,
                     'analytics' => 'advanced',
                     'multi_currency' => true,
                     'multi_language' => true,
+                    'themes' => 'all', // All themes including custom
                 ],
                 'features' => [
                     'Everything in Growth',
+                    'All themes + custom themes',
                     'Multi-currency support',
                     'Multi-language support',
                     'Advanced reporting',
@@ -125,7 +135,7 @@ class PlanSeeder extends Seeder
                 'monthly_price' => 499,
                 'yearly_price' => 4990,
                 'currency' => 'USD',
-                'trial_days' => 30,
+                'trial_days' => 7, // 7-day free trial
                 'is_active' => true,
                 'is_featured' => false,
                 'sort_order' => 4,
@@ -137,17 +147,20 @@ class PlanSeeder extends Seeder
                     'orders' => -1,
                     'staff_accounts' => -1,
                     'storage_mb' => -1,
-                    'custom_domain' => true,
+                    'custom_domain' => true, // REQUIRED
                     'api_access' => true,
                     'priority_support' => true,
                     'analytics' => 'enterprise',
                     'multi_currency' => true,
                     'multi_language' => true,
                     'white_label' => true,
+                    'themes' => 'all',
+                    'custom_theme_development' => true,
                 ],
                 'features' => [
                     'Everything in Professional',
                     'Unlimited everything',
+                    'Custom theme development',
                     'White-label option',
                     'Custom development',
                     'SLA guarantee',

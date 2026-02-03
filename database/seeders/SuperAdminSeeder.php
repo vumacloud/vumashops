@@ -14,10 +14,10 @@ class SuperAdminSeeder extends Seeder
     public function run(): void
     {
         Admin::updateOrCreate(
-            ['email' => 'admin@vumashops.com'],
+            ['email' => 'admin@vumacloud.com'],
             [
                 'name' => 'Super Admin',
-                'email' => 'admin@vumashops.com',
+                'email' => 'admin@vumacloud.com',
                 'password' => Hash::make('password'),
                 'is_super_admin' => true,
                 'is_active' => true,
