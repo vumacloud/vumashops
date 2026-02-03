@@ -10,8 +10,9 @@ class PlanSeeder extends Seeder
     /**
      * Run the database seeds.
      *
-     * VumaShops by VumaCloud - All plans have 7-day free trial
-     * ALL vendors MUST use custom domains (no vumacloud.com subdomains)
+     * VumaShops by VumaCloud
+     * Simple yearly pricing for African merchants
+     * ALL plans include: domain + 3 email addresses + SSL
      */
     public function run(): void
     {
@@ -19,153 +20,113 @@ class PlanSeeder extends Seeder
             [
                 'name' => 'Starter',
                 'slug' => 'starter',
-                'description' => 'Perfect for small businesses just getting started with e-commerce.',
-                'monthly_price' => 29,
-                'yearly_price' => 290,
+                'description' => 'Perfect for small businesses and WhatsApp sellers getting started online.',
+                'monthly_price' => null, // Yearly only
+                'yearly_price' => 59,
                 'currency' => 'USD',
-                'trial_days' => 7, // 7-day free trial
+                'trial_days' => 7,
                 'is_active' => true,
                 'is_featured' => false,
                 'sort_order' => 1,
                 'limits' => [
                     'products' => 50,
                     'categories' => 10,
-                    'attributes' => 20,
-                    'attribute_families' => 5,
-                    'orders' => 100,
+                    'orders_per_month' => 100,
                     'staff_accounts' => 2,
                     'storage_mb' => 500,
-                    'custom_domain' => true, // REQUIRED - all vendors use custom domains
+                    'email_accounts' => 3, // 3 email addresses included
+                    'custom_domain' => true,
+                    'domain_included' => true, // .com or country TLD included
+                    'ssl_certificate' => true,
                     'api_access' => false,
-                    'priority_support' => false,
-                    'analytics' => 'basic',
-                    'themes' => ['starter', 'minimal'], // Available themes
+                    'themes' => ['starter', 'minimal', 'whatsapp'],
                 ],
                 'features' => [
-                    'Custom domain (required)',
-                    'Basic storefront themes',
-                    'Mobile responsive design',
-                    'M-Pesa integration',
-                    'Email notifications (Brevo)',
-                    'SMS notifications (Africa\'s Talking)',
+                    'Free domain (.com, .co.ke, .co.ug, etc.)',
+                    '3 professional email addresses',
+                    'Free SSL certificate',
+                    '50 products',
+                    'M-Pesa & mobile money',
+                    'WhatsApp order button',
+                    'SMS & email notifications',
+                    'Mobile-friendly store',
                     'Basic analytics',
                     'Email support',
-                    'SSL certificate included',
                 ],
             ],
             [
                 'name' => 'Growth',
                 'slug' => 'growth',
-                'description' => 'For growing businesses that need more features and capacity.',
-                'monthly_price' => 79,
-                'yearly_price' => 790,
+                'description' => 'For growing businesses ready to scale their online presence.',
+                'monthly_price' => null, // Yearly only
+                'yearly_price' => 89,
                 'currency' => 'USD',
-                'trial_days' => 7, // 7-day free trial
+                'trial_days' => 7,
                 'is_active' => true,
-                'is_featured' => true,
+                'is_featured' => true, // Most popular
                 'sort_order' => 2,
                 'limits' => [
                     'products' => 500,
                     'categories' => 50,
-                    'attributes' => 100,
-                    'attribute_families' => 20,
-                    'orders' => 1000,
+                    'orders_per_month' => 1000,
                     'staff_accounts' => 5,
                     'storage_mb' => 2000,
-                    'custom_domain' => true, // REQUIRED
+                    'email_accounts' => 3,
+                    'custom_domain' => true,
+                    'domain_included' => true,
+                    'ssl_certificate' => true,
                     'api_access' => true,
-                    'priority_support' => true,
-                    'analytics' => 'advanced',
-                    'themes' => ['starter', 'minimal', 'modern', 'boutique', 'electronics'],
+                    'themes' => ['starter', 'minimal', 'whatsapp', 'modern', 'boutique', 'electronics', 'grocery'],
                 ],
                 'features' => [
-                    'Everything in Starter',
+                    'Everything in Starter, plus:',
+                    '500 products',
                     'All premium themes',
+                    'Discount codes & coupons',
+                    'Abandoned cart recovery',
                     'All payment gateways',
                     'Advanced analytics',
                     'API access',
                     'Priority support',
-                    'Discount codes',
-                    'Abandoned cart recovery',
                     'Cloudflare CDN',
                 ],
             ],
             [
-                'name' => 'Professional',
+                'name' => 'Pro',
                 'slug' => 'professional',
                 'description' => 'For established businesses with high volume sales.',
-                'monthly_price' => 199,
-                'yearly_price' => 1990,
+                'monthly_price' => null, // Yearly only
+                'yearly_price' => 129,
                 'currency' => 'USD',
-                'trial_days' => 7, // 7-day free trial
+                'trial_days' => 7,
                 'is_active' => true,
                 'is_featured' => false,
                 'sort_order' => 3,
                 'limits' => [
-                    'products' => 5000,
-                    'categories' => 200,
-                    'attributes' => 500,
-                    'attribute_families' => 50,
-                    'orders' => 10000,
+                    'products' => -1, // Unlimited
+                    'categories' => -1,
+                    'orders_per_month' => -1,
                     'staff_accounts' => 15,
                     'storage_mb' => 10000,
-                    'custom_domain' => true, // REQUIRED
+                    'email_accounts' => 3,
+                    'custom_domain' => true,
+                    'domain_included' => true,
+                    'ssl_certificate' => true,
                     'api_access' => true,
-                    'priority_support' => true,
-                    'analytics' => 'advanced',
                     'multi_currency' => true,
-                    'multi_language' => true,
-                    'themes' => 'all', // All themes including custom
-                ],
-                'features' => [
-                    'Everything in Growth',
-                    'All themes + custom themes',
-                    'Multi-currency support',
-                    'Multi-language support',
-                    'Advanced reporting',
-                    'Bulk operations',
-                    'Custom integrations',
-                    'Dedicated account manager',
-                ],
-            ],
-            [
-                'name' => 'Enterprise',
-                'slug' => 'enterprise',
-                'description' => 'Custom solutions for large enterprises with unlimited needs.',
-                'monthly_price' => 499,
-                'yearly_price' => 4990,
-                'currency' => 'USD',
-                'trial_days' => 7, // 7-day free trial
-                'is_active' => true,
-                'is_featured' => false,
-                'sort_order' => 4,
-                'limits' => [
-                    'products' => -1, // unlimited
-                    'categories' => -1,
-                    'attributes' => -1,
-                    'attribute_families' => -1,
-                    'orders' => -1,
-                    'staff_accounts' => -1,
-                    'storage_mb' => -1,
-                    'custom_domain' => true, // REQUIRED
-                    'api_access' => true,
-                    'priority_support' => true,
-                    'analytics' => 'enterprise',
-                    'multi_currency' => true,
-                    'multi_language' => true,
-                    'white_label' => true,
                     'themes' => 'all',
-                    'custom_theme_development' => true,
+                    'custom_theme' => true,
                 ],
                 'features' => [
-                    'Everything in Professional',
-                    'Unlimited everything',
-                    'Custom theme development',
-                    'White-label option',
-                    'Custom development',
-                    'SLA guarantee',
-                    'Dedicated support team',
-                    'On-premise deployment option',
+                    'Everything in Growth, plus:',
+                    'Unlimited products',
+                    'Unlimited orders',
+                    'All themes + custom CSS',
+                    'Multi-currency support',
+                    'Advanced reporting',
+                    'Bulk product import/export',
+                    'Dedicated account manager',
+                    'Phone support',
                 ],
             ],
         ];
@@ -176,5 +137,8 @@ class PlanSeeder extends Seeder
                 $planData
             );
         }
+
+        // Disable Enterprise plan (not needed for this pricing model)
+        Plan::where('slug', 'enterprise')->update(['is_active' => false]);
     }
 }
