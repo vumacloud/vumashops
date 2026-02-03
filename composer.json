@@ -1,8 +1,8 @@
 {
     "name": "vumashops/platform",
     "type": "project",
-    "description": "VumaShops - Multi-Tenant E-Commerce Platform for African Businesses",
-    "keywords": ["laravel", "ecommerce", "multi-tenant", "saas", "africa", "payments"],
+    "description": "VumaShops - Multi-Tenant E-Commerce Platform for African Businesses by VumaCloud",
+    "keywords": ["laravel", "ecommerce", "multi-tenant", "saas", "africa", "payments", "mpesa"],
     "license": "proprietary",
     "require": {
         "php": "^8.2",
@@ -13,19 +13,13 @@
         "spatie/laravel-medialibrary": "^11.0",
         "spatie/laravel-sluggable": "^3.6",
         "spatie/laravel-activitylog": "^4.8",
-        "stancl/tenancy": "^3.8",
-        "unicodeveloper/laravel-paystack": "^1.0",
-        "kingflamez/laravelrave": "^5.0",
-        "iankumu/mpesa": "^2.0",
-        "patricpoba/mtn-momo-api-php": "^1.0",
-        "juanparati/brevosuite": "^1.0",
-        "africastalking/africastalking": "^3.0",
         "guzzlehttp/guzzle": "^7.8",
         "intervention/image": "^3.3",
         "barryvdh/laravel-dompdf": "^3.0",
         "maatwebsite/excel": "^3.1",
         "livewire/livewire": "^3.4",
-        "filament/filament": "^3.2"
+        "filament/filament": "^3.2",
+        "africastalking/africastalking": "^3.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
