@@ -111,4 +111,21 @@ return [
         'app_secret' => env('FACEBOOK_APP_SECRET'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | WHMCS Integration
+    |--------------------------------------------------------------------------
+    |
+    | WHMCS is the billing/provisioning system. These settings configure
+    | the API key for WHMCS to authenticate when provisioning stores.
+    |
+    | Generate a secure API key and configure it in both WHMCS and here.
+    |
+    */
+
+    'whmcs' => [
+        'api_key' => env('WHMCS_API_KEY'),
+        'url' => env('WHMCS_URL'), // Optional: for callbacks to WHMCS
+    ],
+
 ];
