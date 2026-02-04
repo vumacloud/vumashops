@@ -2,142 +2,139 @@
 
 declare(strict_types=1);
 
+use Stancl\Tenancy\Database\Models\Domain;
+use App\Models\Tenant;
+
 return [
+    /**
+     * Use our custom Tenant model
+     */
+    'tenant_model' => Tenant::class,
 
-    /*
-    |--------------------------------------------------------------------------
-    | Tenant Model
-    |--------------------------------------------------------------------------
-    */
+    /**
+     * Use UUID for tenant IDs
+     */
+    'id_generator' => Stancl\Tenancy\UUIDGenerator::class,
 
-    'tenant_model' => \App\Models\Tenant::class,
+    'domain_model' => Domain::class,
 
-    /*
-    |--------------------------------------------------------------------------
-    | Central Domains
-    |--------------------------------------------------------------------------
-    |
-    | These domains will not be treated as tenant domains, they belong to
-    | the central application (super admin panel).
-    |
-    */
-
-    'central_domains' => array_filter(array_map('trim', explode(',', env('TENANCY_CENTRAL_DOMAINS', 'shops.vumacloud.com')))),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Tenant Identification
-    |--------------------------------------------------------------------------
-    |
-    | How tenants are identified - by domain, subdomain, or path.
-    |
-    */
-
-    'identification_strategy' => 'domain', // 'domain', 'subdomain', or 'path'
-
-    /*
-    |--------------------------------------------------------------------------
-    | Database Mode
-    |--------------------------------------------------------------------------
-    |
-    | 'single' - All tenants share one database with tenant_id column
-    | 'multi'  - Each tenant has their own database
-    |
-    */
-
-    'database_mode' => 'single',
-
-    /*
-    |--------------------------------------------------------------------------
-    | Tenant-Aware Models
-    |--------------------------------------------------------------------------
-    |
-    | Models that should automatically scope queries to the current tenant.
-    |
-    */
-
-    'tenant_aware_models' => [
-        \App\Models\Product::class,
-        \App\Models\Category::class,
-        \App\Models\Order::class,
-        \App\Models\Customer::class,
-        \App\Models\Attribute::class,
-        \App\Models\AttributeFamily::class,
-        \App\Models\Cart::class,
-        \App\Models\Wishlist::class,
-        \App\Models\Review::class,
-        \App\Models\Coupon::class,
-        \App\Models\TaxRate::class,
-        \App\Models\ShippingMethod::class,
+    /**
+     * Central domains - these are NOT tenant domains
+     * shops.vumacloud.com is the platform admin
+     */
+    'central_domains' => [
+        'shops.vumacloud.com',
+        'localhost',
+        '127.0.0.1',
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Features Available Per Plan
-    |--------------------------------------------------------------------------
-    */
+    /**
+     * Tenancy bootstrappers are executed when tenancy is initialized.
+     */
+    'bootstrappers' => [
+        Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper::class,
+        Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper::class,
+        Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper::class,
+        Stancl\Tenancy\Bootstrappers\QueueTenancyBootstrapper::class,
+        Stancl\Tenancy\Bootstrappers\RedisTenancyBootstrapper::class,
+    ],
 
-    'plan_features' => [
-        'starter' => [
-            'products' => 50,
-            'categories' => 10,
-            'attributes' => 20,
-            'orders' => 100,
-            'staff_accounts' => 2,
-            'custom_domain' => false,
-            'analytics' => 'basic',
-            'support' => 'email',
-        ],
-        'growth' => [
-            'products' => 500,
-            'categories' => 50,
-            'attributes' => 100,
-            'orders' => 1000,
-            'staff_accounts' => 5,
-            'custom_domain' => true,
-            'analytics' => 'advanced',
-            'support' => 'priority',
-        ],
-        'professional' => [
-            'products' => 5000,
-            'categories' => 200,
-            'attributes' => 500,
-            'orders' => 10000,
-            'staff_accounts' => 15,
-            'custom_domain' => true,
-            'analytics' => 'advanced',
-            'support' => 'priority',
-        ],
-        'enterprise' => [
-            'products' => -1, // unlimited
-            'categories' => -1,
-            'attributes' => -1,
-            'orders' => -1,
-            'staff_accounts' => -1,
-            'custom_domain' => true,
-            'analytics' => 'enterprise',
-            'support' => 'dedicated',
+    /**
+     * Database tenancy config.
+     */
+    'database' => [
+        'central_connection' => env('DB_CONNECTION', 'central'),
+
+        /**
+         * Connection used as a "template" for tenant database connection.
+         */
+        'template_tenant_connection' => null,
+
+        /**
+         * Tenant database names: vumashops_tenant_{uuid}
+         */
+        'prefix' => 'vumashops_tenant_',
+        'suffix' => '',
+
+        /**
+         * Database managers
+         */
+        'managers' => [
+            'sqlite' => Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager::class,
+            'mysql' => Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager::class,
+            'pgsql' => Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLDatabaseManager::class,
         ],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Default Tenant Settings
-    |--------------------------------------------------------------------------
-    */
-
-    'default_settings' => [
-        'store_name' => 'My Store',
-        'store_description' => 'Welcome to my store',
-        'currency' => 'KES',
-        'timezone' => 'Africa/Nairobi',
-        'locale' => 'en',
-        'tax_enabled' => true,
-        'tax_rate' => 16,
-        'free_shipping_threshold' => 5000,
-        'low_stock_threshold' => 5,
-        'order_prefix' => 'ORD',
-        'invoice_prefix' => 'INV',
+    /**
+     * Cache tenancy config.
+     * Tags cache with tenant ID for isolation.
+     */
+    'cache' => [
+        'tag_base' => 'tenant',
     ],
 
+    /**
+     * Filesystem tenancy config.
+     * We use DO Spaces (S3) so we suffix the path with tenant ID.
+     */
+    'filesystem' => [
+        'suffix_base' => 'tenant',
+        'disks' => [
+            'local',
+            'public',
+            's3', // DO Spaces
+        ],
+
+        'root_override' => [
+            'local' => '%storage_path%/app/',
+            'public' => '%storage_path%/app/public/',
+        ],
+
+        'suffix_storage_path' => true,
+        'asset_helper_tenancy' => true,
+    ],
+
+    /**
+     * Redis tenancy config.
+     * All Redis keys are prefixed with tenant:{id}: for isolation.
+     */
+    'redis' => [
+        'prefix_base' => 'tenant',
+        'prefixed_connections' => [
+            'default',
+            'cache',
+            'session',
+            'queue',
+        ],
+    ],
+
+    /**
+     * Features
+     */
+    'features' => [
+        Stancl\Tenancy\Features\ViteBundler::class,
+    ],
+
+    /**
+     * Enable tenancy routes
+     */
+    'routes' => true,
+
+    /**
+     * Migration parameters for tenant databases
+     */
+    'migration_parameters' => [
+        '--force' => true,
+        '--path' => [database_path('migrations/tenant')],
+        '--realpath' => true,
+    ],
+
+    /**
+     * Seeder parameters
+     */
+    'seeder_parameters' => [
+        '--class' => 'Database\\Seeders\\TenantDatabaseSeeder',
+        '--force' => true,
+    ],
 ];

@@ -2,177 +2,114 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Spatie\Sluggable\HasSlug;
-use Spatie\Sluggable\SlugOptions;
+use Stancl\Tenancy\Database\Models\Tenant as BaseTenant;
+use Stancl\Tenancy\Contracts\TenantWithDatabase;
+use Stancl\Tenancy\Database\Concerns\HasDatabase;
+use Stancl\Tenancy\Database\Concerns\HasDomains;
 
-class Tenant extends Model
+class Tenant extends BaseTenant implements TenantWithDatabase
 {
-    use HasFactory, HasSlug, SoftDeletes;
+    use HasDatabase, HasDomains;
 
-    protected $fillable = [
-        'name',
-        'slug',
-        'email',
-        'phone',
-        'domain',
-        'subdomain',
-        'logo',
-        'favicon',
-        'description',
-        'address',
-        'city',
-        'state',
-        'country',
-        'postal_code',
-        'currency',
-        'timezone',
-        'locale',
-        'theme',
-        'domain_verified',
-        'plan_id',
-        'subscription_status',
-        'subscription_ends_at',
-        'trial_ends_at',
-        'is_active',
-        'settings',
-        'metadata',
-        'whmcs_service_id',
-        'whmcs_client_id',
-        'suspended_at',
-        'suspension_reason',
-    ];
+    /**
+     * Custom columns on tenants table (central database)
+     */
+    public static function getCustomColumns(): array
+    {
+        return [
+            'id',
+            'name',
+            'email',
+            'phone',
+            'country',
+            'currency',
+            'timezone',
+            'locale',
+            'theme',
+            'logo',
+            'favicon',
+            'plan_id',
+            'subscription_status',
+            'subscription_ends_at',
+            'trial_ends_at',
+            'is_active',
+            'whmcs_service_id',
+            'whmcs_client_id',
+            'suspended_at',
+            'suspension_reason',
+            'ssl_status',
+            'ssl_issued_at',
+            'settings',
+            'data',
+        ];
+    }
 
     protected $casts = [
         'is_active' => 'boolean',
-        'domain_verified' => 'boolean',
         'settings' => 'array',
-        'metadata' => 'array',
+        'data' => 'array',
         'subscription_ends_at' => 'datetime',
         'trial_ends_at' => 'datetime',
         'suspended_at' => 'datetime',
+        'ssl_issued_at' => 'datetime',
     ];
 
-    protected $attributes = [
-        'is_active' => true,
-        'subscription_status' => 'trial',
-        'settings' => '{}',
-        'metadata' => '{}',
-    ];
-
-    public function getSlugOptions(): SlugOptions
-    {
-        return SlugOptions::create()
-            ->generateSlugsFrom('name')
-            ->saveSlugsTo('slug');
-    }
-
-    public function plan(): BelongsTo
+    /**
+     * Get the plan for this tenant
+     */
+    public function plan()
     {
         return $this->belongsTo(Plan::class);
     }
 
-    public function subscription(): HasOne
-    {
-        return $this->hasOne(Subscription::class)->latest();
-    }
-
-    public function subscriptions(): HasMany
-    {
-        return $this->hasMany(Subscription::class);
-    }
-
-    public function admins(): HasMany
-    {
-        return $this->hasMany(Admin::class);
-    }
-
-    public function products(): HasMany
-    {
-        return $this->hasMany(Product::class);
-    }
-
-    public function categories(): HasMany
-    {
-        return $this->hasMany(Category::class);
-    }
-
-    public function customers(): HasMany
-    {
-        return $this->hasMany(Customer::class);
-    }
-
-    public function orders(): HasMany
-    {
-        return $this->hasMany(Order::class);
-    }
-
-    public function paymentMethods(): HasMany
-    {
-        return $this->hasMany(TenantPaymentGateway::class);
-    }
-
-    public function paymentGateways(): HasMany
+    /**
+     * Get payment gateways configured for this tenant
+     */
+    public function paymentGateways()
     {
         return $this->hasMany(TenantPaymentGateway::class);
     }
 
     /**
-     * Get enabled payment gateways for this tenant.
+     * Check if tenant is on trial
      */
-    public function getEnabledPaymentGateways()
-    {
-        return $this->paymentGateways()->enabled()->configured()->ordered()->get();
-    }
-
-    /**
-     * Get a specific payment gateway configuration.
-     */
-    public function getPaymentGateway(string $gateway): ?TenantPaymentGateway
-    {
-        return $this->paymentGateways()->where('gateway', $gateway)->first();
-    }
-
-    /**
-     * Check if a payment gateway is enabled and configured.
-     */
-    public function hasPaymentGateway(string $gateway): bool
-    {
-        $pg = $this->getPaymentGateway($gateway);
-        return $pg && $pg->is_enabled && $pg->isConfigured();
-    }
-
-    public function domains(): HasMany
-    {
-        return $this->hasMany(TenantDomain::class);
-    }
-
-    public function getFullDomainAttribute(): string
-    {
-        if ($this->domain) {
-            return $this->domain;
-        }
-
-        return $this->subdomain . '.' . config('app.url');
-    }
-
     public function isOnTrial(): bool
     {
-        return $this->subscription_status === 'trial' &&
-               $this->trial_ends_at &&
-               $this->trial_ends_at->isFuture();
+        return $this->subscription_status === 'trial'
+            && $this->trial_ends_at
+            && $this->trial_ends_at->isFuture();
     }
 
+    /**
+     * Check if tenant subscription is active
+     */
+    public function isActive(): bool
+    {
+        if (!$this->is_active) {
+            return false;
+        }
+
+        if ($this->isOnTrial()) {
+            return true;
+        }
+
+        return $this->subscription_status === 'active'
+            && $this->subscription_ends_at
+            && $this->subscription_ends_at->isFuture();
+    }
+
+    /**
+     * Check if tenant is suspended
+     */
     public function isSuspended(): bool
     {
-        return $this->subscription_status === 'suspended' || $this->suspended_at !== null;
+        return $this->subscription_status === 'suspended'
+            || $this->suspended_at !== null;
     }
 
+    /**
+     * Suspend the tenant
+     */
     public function suspend(string $reason = null): self
     {
         $this->update([
@@ -181,9 +118,13 @@ class Tenant extends Model
             'suspension_reason' => $reason,
             'is_active' => false,
         ]);
+
         return $this;
     }
 
+    /**
+     * Unsuspend the tenant
+     */
     public function unsuspend(): self
     {
         $this->update([
@@ -192,79 +133,66 @@ class Tenant extends Model
             'suspension_reason' => null,
             'is_active' => true,
         ]);
+
         return $this;
     }
 
-    public function isSubscriptionActive(): bool
+    /**
+     * Get a setting value
+     */
+    public function getSetting(string $key, $default = null)
     {
-        if ($this->isOnTrial()) {
-            return true;
-        }
-
-        return $this->subscription_status === 'active' &&
-               $this->subscription_ends_at &&
-               $this->subscription_ends_at->isFuture();
+        return data_get($this->settings, $key, $default);
     }
 
-    public function hasFeature(string $feature): bool
+    /**
+     * Set a setting value
+     */
+    public function setSetting(string $key, $value): self
     {
-        if (!$this->plan) {
-            return false;
-        }
+        $settings = $this->settings ?? [];
+        data_set($settings, $key, $value);
+        $this->settings = $settings;
+        $this->save();
 
-        $limits = $this->plan->limits ?? [];
-        return isset($limits[$feature]) && $limits[$feature] !== false;
+        return $this;
     }
 
+    /**
+     * Get plan feature limit
+     */
     public function getFeatureLimit(string $feature): int
     {
         if (!$this->plan) {
             return 0;
         }
 
-        $limits = $this->plan->limits ?? [];
-        return $limits[$feature] ?? 0;
+        return data_get($this->plan->limits, $feature, 0);
     }
 
-    public function canAddProduct(): bool
+    /**
+     * Check if tenant has feature
+     */
+    public function hasFeature(string $feature): bool
     {
-        $limit = $this->getFeatureLimit('products');
-        if ($limit === -1) return true; // unlimited
-        return $this->products()->count() < $limit;
+        if (!$this->plan) {
+            return false;
+        }
+
+        $value = data_get($this->plan->limits, $feature);
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return $value !== 0 && $value !== null;
     }
 
-    public function canAddCategory(): bool
+    /**
+     * Get the primary domain
+     */
+    public function getPrimaryDomain(): ?string
     {
-        $limit = $this->getFeatureLimit('categories');
-        if ($limit === -1) return true;
-        return $this->categories()->count() < $limit;
-    }
-
-    public function getSetting(string $key, $default = null)
-    {
-        $settings = $this->settings ?? [];
-        return data_get($settings, $key, $default);
-    }
-
-    public function setSetting(string $key, $value): self
-    {
-        $settings = $this->settings ?? [];
-        data_set($settings, $key, $value);
-        $this->settings = $settings;
-        return $this;
-    }
-
-    public function getCurrencySymbol(): string
-    {
-        $currencies = config('app.supported_currencies', []);
-        return $currencies[$this->currency]['symbol'] ?? $this->currency;
-    }
-
-    public function formatPrice($amount): string
-    {
-        $currencies = config('app.supported_currencies', []);
-        $currencyConfig = $currencies[$this->currency] ?? ['symbol' => $this->currency, 'decimals' => 2];
-
-        return $currencyConfig['symbol'] . ' ' . number_format($amount, $currencyConfig['decimals']);
+        return $this->domains()->first()?->domain;
     }
 }

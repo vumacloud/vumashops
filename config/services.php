@@ -1,52 +1,26 @@
 <?php
 
-/**
- * Third-party Services Configuration
- *
- * VumaShops by VumaCloud
- */
-
 return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cloudflare DNS Management
+    | Third Party Services
     |--------------------------------------------------------------------------
     |
-    | Used for automating DNS configuration for vendor custom domains.
-    | All vendors MUST use custom domains - no vumacloud.com subdomains allowed.
+    | This file is for storing the credentials for third party services such
+    | as Mailgun, Postmark, AWS and more. This file provides the de facto
+    | location for this type of information, allowing packages to have
+    | a conventional file to locate the various service credentials.
     |
-    */
-
-    'cloudflare' => [
-        'api_token' => env('CLOUDFLARE_API_TOKEN'),
-        'zone_id' => env('CLOUDFLARE_ZONE_ID'),
-        'account_id' => env('CLOUDFLARE_ACCOUNT_ID'),
-        'server_ip' => env('CLOUDFLARE_SERVER_IP', env('SERVER_IP')),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Postmark / Mailgun (fallback)
-    |--------------------------------------------------------------------------
     */
 
     'postmark' => [
-        'token' => env('POSTMARK_TOKEN'),
+        'key' => env('POSTMARK_API_KEY'),
     ],
 
-    'mailgun' => [
-        'domain' => env('MAILGUN_DOMAIN'),
-        'secret' => env('MAILGUN_SECRET'),
-        'endpoint' => env('MAILGUN_ENDPOINT', 'api.mailgun.net'),
-        'scheme' => 'https',
+    'resend' => [
+        'key' => env('RESEND_API_KEY'),
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | AWS Services (for S3 storage)
-    |--------------------------------------------------------------------------
-    */
 
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
@@ -54,78 +28,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | DigitalOcean Spaces (alternative storage)
-    |--------------------------------------------------------------------------
-    */
-
-    'digitalocean' => [
-        'spaces' => [
-            'key' => env('DO_SPACES_KEY'),
-            'secret' => env('DO_SPACES_SECRET'),
-            'region' => env('DO_SPACES_REGION', 'nyc3'),
-            'bucket' => env('DO_SPACES_BUCKET'),
-            'url' => env('DO_SPACES_URL'),
-            'endpoint' => env('DO_SPACES_ENDPOINT'),
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Slack Notifications (for admin alerts)
-    |--------------------------------------------------------------------------
-    */
-
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Google Services
-    |--------------------------------------------------------------------------
-    */
-
-    'google' => [
-        'analytics_id' => env('GOOGLE_ANALYTICS_ID'),
-        'tag_manager_id' => env('GOOGLE_TAG_MANAGER_ID'),
-        'recaptcha' => [
-            'site_key' => env('RECAPTCHA_SITE_KEY'),
-            'secret_key' => env('RECAPTCHA_SECRET_KEY'),
-        ],
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Facebook / Meta
-    |--------------------------------------------------------------------------
-    */
-
-    'facebook' => [
-        'pixel_id' => env('FACEBOOK_PIXEL_ID'),
-        'app_id' => env('FACEBOOK_APP_ID'),
-        'app_secret' => env('FACEBOOK_APP_SECRET'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | WHMCS Integration
-    |--------------------------------------------------------------------------
-    |
-    | WHMCS is the billing/provisioning system. These settings configure
-    | the API key for WHMCS to authenticate when provisioning stores.
-    |
-    | Generate a secure API key and configure it in both WHMCS and here.
-    |
-    */
-
-    'whmcs' => [
-        'api_key' => env('WHMCS_API_KEY'),
-        'url' => env('WHMCS_URL'), // Optional: for callbacks to WHMCS
     ],
 
 ];
