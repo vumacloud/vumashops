@@ -77,7 +77,8 @@ Vendors choose their theme from the dashboard:
 apt update && apt upgrade -y
 
 # Install required packages
-apt install -y nginx mysql-client redis-server supervisor certbot python3-certbot-nginx \
+# Note: No redis-server needed - we use DigitalOcean Managed Redis
+apt install -y nginx mysql-client supervisor certbot python3-certbot-nginx \
     php8.3-fpm php8.3-cli php8.3-mysql php8.3-mbstring php8.3-xml php8.3-curl \
     php8.3-zip php8.3-gd php8.3-intl php8.3-bcmath php8.3-redis
 
