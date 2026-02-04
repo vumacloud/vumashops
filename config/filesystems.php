@@ -68,6 +68,28 @@ return [
             'throw' => false,
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | DigitalOcean Spaces (recommended for production)
+        |--------------------------------------------------------------------------
+        |
+        | S3-compatible object storage for all vendor uploads.
+        | CDN-backed, scalable, no disk space limits.
+        |
+        */
+
+        'do_spaces' => [
+            'driver' => 's3',
+            'key' => env('DO_SPACES_KEY'),
+            'secret' => env('DO_SPACES_SECRET'),
+            'region' => env('DO_SPACES_REGION', 'fra1'),
+            'bucket' => env('DO_SPACES_BUCKET'),
+            'endpoint' => env('DO_SPACES_ENDPOINT', 'https://fra1.digitaloceanspaces.com'),
+            'url' => env('DO_SPACES_CDN_ENDPOINT'), // Use CDN URL for public assets
+            'visibility' => 'public',
+            'throw' => false,
+        ],
+
     ],
 
     /*
