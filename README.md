@@ -236,18 +236,35 @@ APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://shops.vumacloud.com
 
-# DigitalOcean Managed Database
+# DigitalOcean Managed MySQL
 DB_CONNECTION=mysql
-DB_HOST=your-db-cluster.db.ondigitalocean.com
+DB_HOST=your-db-cluster-do-user-xxxxx-0.db.ondigitalocean.com
 DB_PORT=25060
 DB_DATABASE=vumashops
 DB_USERNAME=doadmin
 DB_PASSWORD=your-password
 MYSQL_ATTR_SSL_CA=/etc/ssl/certs/ca-certificates.crt
 
-# Redis
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
+# DigitalOcean Managed Redis (TLS on port 25061)
+REDIS_CLIENT=phpredis
+REDIS_HOST=your-redis-cluster-do-user-xxxxx-0.db.ondigitalocean.com
+REDIS_PASSWORD=your-redis-password
+REDIS_PORT=25061
+REDIS_SCHEME=tls
+
+# Use Redis for session, cache, and queue in production
+SESSION_DRIVER=redis
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+
+# DigitalOcean Spaces (for vendor product images)
+FILESYSTEM_DISK=do_spaces
+DO_SPACES_KEY=your-spaces-access-key
+DO_SPACES_SECRET=your-spaces-secret-key
+DO_SPACES_REGION=fra1
+DO_SPACES_BUCKET=vumashops
+DO_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
+DO_SPACES_CDN_ENDPOINT=https://vumashops.fra1.cdn.digitaloceanspaces.com
 
 # Domain config
 VUMASHOPS_PLATFORM_DOMAIN=shops.vumacloud.com
@@ -281,6 +298,26 @@ WHMCS_URL=https://billing.vumacloud.com
 ```
 
 **Note:** Payment gateway credentials (Paystack, Flutterwave, M-Pesa, etc.) are configured per-vendor in their dashboard, NOT in .env.
+
+---
+
+## DigitalOcean Infrastructure Setup
+
+### 1. Managed MySQL Database
+- Create Database Cluster → MySQL 8
+- Get connection details from cluster overview
+- Use port `25060` with SSL
+
+### 2. Managed Redis
+- Create Database Cluster → Redis 7
+- Use port `25061` with TLS (`REDIS_SCHEME=tls`)
+- Provides HA, auto-failover, managed backups
+
+### 3. Spaces (Object Storage)
+- Create Space: `vumashops`
+- Enable CDN for faster asset delivery
+- Generate Spaces access keys (API → Spaces Keys)
+- All vendor product images stored here (scalable, no disk limits)
 
 ---
 
