@@ -173,9 +173,38 @@ certbot --nginx -d shops.vumacloud.com -d demoshop.vumacloud.com
 # Certbot will automatically update nginx config with SSL
 ```
 
-### Step 4: Update Nginx for Production + Vendor Domains
+### Step 4: Setup Cloudflare Origin Certificate for Vendor Domains
 
-After SSL is configured, update nginx for full production setup:
+Vendor stores use custom domains proxied through Cloudflare. Create an Origin Certificate:
+
+1. **In Cloudflare Dashboard:**
+   - Go to SSL/TLS → Origin Server → Create Certificate
+   - Private key type: RSA (2048)
+   - Hostnames: `*` (wildcard - covers all vendor domains)
+   - Validity: 15 years
+   - Click Create
+
+2. **Install the certificate on your server:**
+
+```bash
+# Create the certificate file (paste from Cloudflare)
+nano /etc/ssl/certs/cloudflare-origin.pem
+# Paste the Origin Certificate, save and exit
+
+# Create the private key file (paste from Cloudflare)
+nano /etc/ssl/private/cloudflare-origin.key
+# Paste the Private Key, save and exit
+
+# Set proper permissions
+chmod 644 /etc/ssl/certs/cloudflare-origin.pem
+chmod 600 /etc/ssl/private/cloudflare-origin.key
+```
+
+**Note:** This Origin Certificate is used for encrypted communication between Cloudflare and your server. Cloudflare handles the public-facing SSL for vendor domains.
+
+### Step 5: Update Nginx for Production + Vendor Domains
+
+After SSL certificates are configured, update nginx for full production setup:
 
 ```bash
 # Copy the full production config
@@ -185,7 +214,7 @@ cp /var/www/vumashops/deployment/nginx/vumashops.conf /etc/nginx/sites-available
 nginx -t && systemctl reload nginx
 ```
 
-### Step 5: Setup Queue Workers
+### Step 6: Setup Queue Workers
 
 ```bash
 cat > /etc/supervisor/conf.d/vumashops.conf << 'EOF'
@@ -206,13 +235,13 @@ EOF
 supervisorctl reread && supervisorctl update && supervisorctl start vumashops-worker:*
 ```
 
-### Step 6: Setup Cron
+### Step 7: Setup Cron
 
 ```bash
 (crontab -l 2>/dev/null; echo "* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1") | crontab -
 ```
 
-### Step 7: Verify Installation
+### Step 8: Verify Installation
 
 ```bash
 # Check Laravel
