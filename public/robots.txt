@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /admin
+Disallow: /super-admin
+Disallow: /api/
+Allow: /
+
+Sitemap: https://shops.vumacloud.com/sitemap.xml
