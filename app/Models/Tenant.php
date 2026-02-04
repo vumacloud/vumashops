@@ -111,7 +111,37 @@ class Tenant extends Model
 
     public function paymentMethods(): HasMany
     {
-        return $this->hasMany(TenantPaymentMethod::class);
+        return $this->hasMany(TenantPaymentGateway::class);
+    }
+
+    public function paymentGateways(): HasMany
+    {
+        return $this->hasMany(TenantPaymentGateway::class);
+    }
+
+    /**
+     * Get enabled payment gateways for this tenant.
+     */
+    public function getEnabledPaymentGateways()
+    {
+        return $this->paymentGateways()->enabled()->configured()->ordered()->get();
+    }
+
+    /**
+     * Get a specific payment gateway configuration.
+     */
+    public function getPaymentGateway(string $gateway): ?TenantPaymentGateway
+    {
+        return $this->paymentGateways()->where('gateway', $gateway)->first();
+    }
+
+    /**
+     * Check if a payment gateway is enabled and configured.
+     */
+    public function hasPaymentGateway(string $gateway): bool
+    {
+        $pg = $this->getPaymentGateway($gateway);
+        return $pg && $pg->is_enabled && $pg->isConfigured();
     }
 
     public function domains(): HasMany

@@ -8,31 +8,10 @@
 
 ---
 
-## Simple Yearly Pricing
-
-All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day free trial**
-
-| Plan | Price | Products | What's Included |
-|------|-------|----------|-----------------|
-| **Starter** | **$59/year** | 50 | Domain, 3 emails, M-Pesa, WhatsApp button, SMS notifications |
-| **Growth** | **$89/year** | 500 | Everything in Starter + all themes, discount codes, API access |
-| **Pro** | **$129/year** | Unlimited | Everything in Growth + unlimited orders, multi-currency, priority support |
-
-### What's Included in Every Plan
-- Free domain (.com, .co.ke, .co.ug, .co.tz, etc.)
-- 3 professional email addresses (you@yourdomain.com)
-- Free SSL certificate
-- M-Pesa & mobile money payments
-- WhatsApp order button
-- SMS & email notifications
-- Mobile-friendly store
-- 7-day free trial
-
----
-
 ## Features
 
 ### Payment Gateways (Africa-focused)
+Each vendor configures their own payment credentials in their dashboard:
 - **M-Pesa Kenya** - Safaricom Daraja API
 - **M-Pesa Tanzania** - Vodacom
 - **MTN Mobile Money** - Uganda, Ghana, Rwanda, Zambia
@@ -41,13 +20,14 @@ All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day f
 - **Flutterwave** - Cards (10+ African countries)
 
 ### Notifications
-- **Email via Brevo** - Order confirmations, shipping updates
+- **Email via Brevo SMTP** - Order confirmations, shipping updates
 - **SMS via Africa's Talking** - Payment receipts, delivery alerts
 
 ### Store Themes
-- Starter, Minimal, WhatsApp Commerce (all plans)
-- Modern, Boutique, TechStore, FreshMart, AfroStyle (Growth+)
-- Custom CSS/themes (Pro)
+Vendors choose their theme from the dashboard:
+- Starter, Minimal, WhatsApp Commerce
+- Modern, Boutique, TechStore, FreshMart, AfroStyle
+- Custom CSS (Pro plans)
 
 ---
 
@@ -62,7 +42,7 @@ All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day f
                           ▼
 ┌─────────────────────────────────────────────────────┐
 │           DigitalOcean Droplet                       │
-│              164.92.184.13                            │
+│              164.92.184.13                           │
 │         shops.vumacloud.com                          │
 │         demoshop.vumacloud.com                       │
 │         + all vendor custom domains                  │
@@ -88,27 +68,60 @@ All plans include: **Free domain + 3 email addresses + SSL certificate + 7-day f
 
 ---
 
-## Deployment
+## Server Deployment
 
-### Server: 164.92.184.13
-
-### Quick Setup
+### Prerequisites
 
 ```bash
-# SSH into server
-ssh root@164.92.184.13
+# Update system
+apt update && apt upgrade -y
 
-# Clone and setup
+# Install required packages
+apt install -y nginx mysql-client redis-server supervisor certbot python3-certbot-nginx \
+    php8.3-fpm php8.3-cli php8.3-mysql php8.3-mbstring php8.3-xml php8.3-curl \
+    php8.3-zip php8.3-gd php8.3-intl php8.3-bcmath php8.3-redis
+
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+
+# Install Composer
+curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+```
+
+### Step 1: Clone and Setup Application
+
+```bash
+# Create web directory
+mkdir -p /var/www
 cd /var/www
+
+# Clone repository
 git clone https://github.com/vumacloud/vumashops.git
 cd vumashops
 
+# Create required directories FIRST
+mkdir -p storage/framework/{cache/data,sessions,views}
+mkdir -p storage/{app/public,logs}
+mkdir -p bootstrap/cache
+
+# Set permissions
+chown -R www-data:www-data storage bootstrap/cache
+chmod -R 775 storage bootstrap/cache
+
+# Create log files
+touch storage/logs/laravel.log
+chown www-data:www-data storage/logs/laravel.log
+
+# Install dependencies
 composer install --optimize-autoloader --no-dev
 npm install && npm run build
 
+# Setup environment
 cp .env.example .env
-# Edit .env with your credentials
+nano .env  # Edit with your credentials (see Environment Variables section)
 
+# Generate key and run migrations
 php artisan key:generate
 php artisan migrate --force
 php artisan db:seed --force
@@ -116,46 +129,99 @@ php artisan storage:link
 php artisan optimize
 ```
 
-### Nginx Setup
+### Step 2: Configure Nginx (WITHOUT SSL first)
+
+Create a temporary nginx config without SSL:
 
 ```bash
-cp deployment/nginx/vumashops.conf /etc/nginx/sites-available/
-ln -s /etc/nginx/sites-available/vumashops.conf /etc/nginx/sites-enabled/
+cat > /etc/nginx/sites-available/vumashops.conf << 'EOF'
+# Temporary config - HTTP only (for certbot)
+server {
+    listen 80;
+    server_name shops.vumacloud.com demoshop.vumacloud.com;
+    root /var/www/vumashops/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+EOF
+
+ln -sf /etc/nginx/sites-available/vumashops.conf /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl restart nginx
 ```
 
-### SSL Certificates
+### Step 3: Obtain SSL Certificates
 
 ```bash
-# For platform domains
+# Get certificates for platform domains
 certbot --nginx -d shops.vumacloud.com -d demoshop.vumacloud.com
 
-# For vendor domains - use Cloudflare Origin Certificate
+# Certbot will automatically update nginx config with SSL
 ```
 
-### Queue Workers
+### Step 4: Update Nginx for Production + Vendor Domains
+
+After SSL is configured, update nginx for full production setup:
 
 ```bash
-# Create supervisor config
+# Copy the full production config
+cp /var/www/vumashops/deployment/nginx/vumashops.conf /etc/nginx/sites-available/
+
+# Test and reload
+nginx -t && systemctl reload nginx
+```
+
+### Step 5: Setup Queue Workers
+
+```bash
 cat > /etc/supervisor/conf.d/vumashops.conf << 'EOF'
 [program:vumashops-worker]
 process_name=%(program_name)s_%(process_num)02d
-command=php /var/www/vumashops/artisan queue:work redis --sleep=3 --tries=3
+command=php /var/www/vumashops/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
 autostart=true
 autorestart=true
+stopasgroup=true
+killasgroup=true
 user=www-data
 numprocs=4
 redirect_stderr=true
 stdout_logfile=/var/www/vumashops/storage/logs/worker.log
+stopwaitsecs=3600
 EOF
 
-supervisorctl reread && supervisorctl update
+supervisorctl reread && supervisorctl update && supervisorctl start vumashops-worker:*
 ```
 
-### Cron
+### Step 6: Setup Cron
 
 ```bash
-(crontab -l; echo "* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+```
+
+### Step 7: Verify Installation
+
+```bash
+# Check Laravel
+php artisan --version
+
+# Check routes
+php artisan route:list --path=whmcs
+
+# Test health endpoint
+curl -s http://localhost/api/health | jq
 ```
 
 ---
@@ -165,12 +231,23 @@ supervisorctl reread && supervisorctl update
 Key variables in `.env`:
 
 ```env
+APP_NAME=VumaShops
+APP_ENV=production
+APP_DEBUG=false
 APP_URL=https://shops.vumacloud.com
 
 # DigitalOcean Managed Database
-DB_HOST=your-db.db.ondigitalocean.com
+DB_CONNECTION=mysql
+DB_HOST=your-db-cluster.db.ondigitalocean.com
 DB_PORT=25060
+DB_DATABASE=vumashops
+DB_USERNAME=doadmin
+DB_PASSWORD=your-password
 MYSQL_ATTR_SSL_CA=/etc/ssl/certs/ca-certificates.crt
+
+# Redis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
 
 # Domain config
 VUMASHOPS_PLATFORM_DOMAIN=shops.vumacloud.com
@@ -179,21 +256,62 @@ VUMASHOPS_SERVER_IP=164.92.184.13
 TENANCY_CENTRAL_DOMAINS=shops.vumacloud.com,demoshop.vumacloud.com
 
 # Cloudflare (for vendor domain automation)
-CLOUDFLARE_API_TOKEN=xxx
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
+CLOUDFLARE_ZONE_ID=your-zone-id
 CLOUDFLARE_SERVER_IP=164.92.184.13
 
-# Brevo (email)
-BREVO_API_KEY=xxx
+# Brevo SMTP (platform emails)
+MAIL_MAILER=smtp
+MAIL_HOST=smtp-relay.brevo.com
+MAIL_PORT=587
+MAIL_USERNAME=your-brevo-smtp-login
+MAIL_PASSWORD=your-brevo-smtp-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=noreply@vumacloud.com
+MAIL_FROM_NAME=VumaShops
 
-# Africa's Talking (SMS)
-AFRICASTALKING_USERNAME=xxx
-AFRICASTALKING_API_KEY=xxx
+# Africa's Talking (platform SMS)
+AFRICASTALKING_USERNAME=your-username
+AFRICASTALKING_API_KEY=your-api-key
+AFRICASTALKING_FROM=VumaShops
 
-# Payment gateways
-PAYSTACK_SECRET_KEY=xxx
-FLUTTERWAVE_SECRET_KEY=xxx
-MPESA_KENYA_CONSUMER_KEY=xxx
-MPESA_KENYA_CONSUMER_SECRET=xxx
+# WHMCS Integration
+WHMCS_API_KEY=your-secure-random-api-key
+WHMCS_URL=https://billing.vumacloud.com
+```
+
+**Note:** Payment gateway credentials (Paystack, Flutterwave, M-Pesa, etc.) are configured per-vendor in their dashboard, NOT in .env.
+
+---
+
+## WHMCS Integration
+
+WHMCS handles billing and provisioning. Configure these endpoints in your WHMCS module:
+
+| Action | Endpoint | Method |
+|--------|----------|--------|
+| Create Account | `/api/whmcs/create` | POST |
+| Suspend | `/api/whmcs/suspend` | POST |
+| Unsuspend | `/api/whmcs/unsuspend` | POST |
+| Terminate | `/api/whmcs/terminate` | POST |
+| Change Plan | `/api/whmcs/change-plan` | POST |
+| Renew | `/api/whmcs/renew` | POST |
+| Get Status | `/api/whmcs/status` | POST/GET |
+
+All endpoints require `Authorization: Bearer {WHMCS_API_KEY}` header.
+
+### Create Account Parameters
+```json
+{
+    "serviceid": "12345",
+    "clientid": "67890",
+    "domain": "mystore.com",
+    "email": "owner@mystore.com",
+    "password": "optional-or-generated",
+    "firstname": "John",
+    "lastname": "Doe",
+    "plan": "starter"
+}
 ```
 
 ---
@@ -212,18 +330,16 @@ MPESA_KENYA_CONSUMER_SECRET=xxx
 
 ---
 
-## Webhook Endpoints
+## Vendor Dashboard
 
-Configure in payment provider dashboards:
+Each vendor configures in their dashboard (`https://their-domain.com/admin`):
 
-| Provider | Endpoint |
-|----------|----------|
-| Paystack | `https://shops.vumacloud.com/api/webhooks/paystack` |
-| Flutterwave | `https://shops.vumacloud.com/api/webhooks/flutterwave` |
-| M-Pesa Kenya | `https://shops.vumacloud.com/api/webhooks/mpesa/kenya` |
-| M-Pesa Tanzania | `https://shops.vumacloud.com/api/webhooks/mpesa/tanzania` |
-| MTN MoMo | `https://shops.vumacloud.com/api/webhooks/mtn-momo` |
-| Airtel Money | `https://shops.vumacloud.com/api/webhooks/airtel-money` |
+- **Store Settings:** Name, logo, favicon, description
+- **Theme:** Select from available themes
+- **Payment Gateways:** Their own Paystack/Flutterwave/M-Pesa credentials
+- **Notifications:** Email templates, SMS settings
+- **Products:** Add/manage products
+- **Orders:** View and manage orders
 
 ---
 
@@ -239,6 +355,37 @@ Configure in payment provider dashboards:
 | South Africa | ZAR | Paystack, Flutterwave |
 | Rwanda | RWF | MTN MoMo, Flutterwave |
 | Zambia | ZMW | MTN MoMo, Airtel Money |
+
+---
+
+## Troubleshooting
+
+### Permission Issues
+```bash
+chown -R www-data:www-data /var/www/vumashops/storage /var/www/vumashops/bootstrap/cache
+chmod -R 775 /var/www/vumashops/storage /var/www/vumashops/bootstrap/cache
+```
+
+### Clear Caches
+```bash
+php artisan config:clear
+php artisan cache:clear
+php artisan view:clear
+php artisan route:clear
+php artisan optimize
+```
+
+### Check Logs
+```bash
+tail -f /var/www/vumashops/storage/logs/laravel.log
+tail -f /var/log/nginx/error.log
+```
+
+### Queue Issues
+```bash
+supervisorctl status
+supervisorctl restart vumashops-worker:*
+```
 
 ---
 
