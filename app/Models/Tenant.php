@@ -33,6 +33,8 @@ class Tenant extends Model
         'currency',
         'timezone',
         'locale',
+        'theme',
+        'domain_verified',
         'plan_id',
         'subscription_status',
         'subscription_ends_at',
@@ -48,6 +50,7 @@ class Tenant extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'domain_verified' => 'boolean',
         'settings' => 'array',
         'metadata' => 'array',
         'subscription_ends_at' => 'datetime',

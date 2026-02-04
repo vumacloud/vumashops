@@ -27,6 +27,8 @@ return new class extends Migration
             $table->string('currency', 3)->default('KES');
             $table->string('timezone')->default('Africa/Nairobi');
             $table->string('locale', 5)->default('en');
+            $table->string('theme')->default('starter');
+            $table->boolean('domain_verified')->default(false);
             $table->foreignId('plan_id')->nullable()->constrained()->nullOnDelete();
             $table->string('subscription_status')->default('trial');
             $table->timestamp('subscription_ends_at')->nullable();
