@@ -28,11 +28,6 @@ return new class extends Migration
             $table->string('timezone')->default('Africa/Nairobi');
             $table->string('locale', 10)->default('en');
 
-            // Branding
-            $table->string('theme')->default('default');
-            $table->string('logo')->nullable();
-            $table->string('favicon')->nullable();
-
             // Subscription
             $table->foreignId('plan_id')->nullable()->constrained()->nullOnDelete();
             $table->string('subscription_status')->default('trial'); // trial, active, cancelled, suspended, expired
@@ -48,9 +43,19 @@ return new class extends Migration
             $table->timestamp('suspended_at')->nullable();
             $table->text('suspension_reason')->nullable();
 
+            // Bagisto Installation
+            $table->string('bagisto_path')->nullable();
+            $table->string('bagisto_database')->nullable();
+            $table->string('bagisto_version')->nullable();
+            $table->timestamp('bagisto_installed_at')->nullable();
+
+            // Storefront
+            $table->string('storefront_type')->default('bagisto_default'); // bagisto_default, nextjs, nuxt
+
             // SSL/Domain
             $table->string('ssl_status')->default('pending'); // pending, verifying, issuing, active, failed
             $table->timestamp('ssl_issued_at')->nullable();
+            $table->timestamp('ssl_expires_at')->nullable();
 
             // Flexible settings and data storage
             $table->json('settings')->nullable();

@@ -147,6 +147,14 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('domains.domain')
                     ->label('Domain')
                     ->limit(30),
+                Tables\Columns\IconColumn::make('bagisto_installed_at')
+                    ->label('Bagisto')
+                    ->boolean()
+                    ->getStateUsing(fn (Tenant $record) => $record->isBagistoInstalled()),
+                Tables\Columns\TextColumn::make('storefront_type')
+                    ->label('Storefront')
+                    ->badge()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -168,6 +176,11 @@ class TenantResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('admin')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('info')
+                    ->url(fn (Tenant $record) => $record->getAdminUrl(), shouldOpenInNewTab: true)
+                    ->visible(fn (Tenant $record) => $record->isBagistoInstalled()),
                 Tables\Actions\Action::make('suspend')
                     ->icon('heroicon-o-pause-circle')
                     ->color('danger')
@@ -201,6 +214,32 @@ class TenantResource extends Resource
                             ->label('Domain'),
                     ])
                     ->columns(2),
+
+                Infolists\Components\Section::make('Bagisto Installation')
+                    ->schema([
+                        Infolists\Components\IconEntry::make('bagisto_installed')
+                            ->label('Installed')
+                            ->boolean()
+                            ->getStateUsing(fn (Tenant $record) => $record->isBagistoInstalled()),
+                        Infolists\Components\TextEntry::make('bagisto_version')
+                            ->label('Version'),
+                        Infolists\Components\TextEntry::make('storefront_type')
+                            ->label('Storefront')
+                            ->badge(),
+                        Infolists\Components\TextEntry::make('bagisto_installed_at')
+                            ->label('Installed At')
+                            ->dateTime(),
+                        Infolists\Components\TextEntry::make('admin_url')
+                            ->label('Admin Panel')
+                            ->getStateUsing(fn (Tenant $record) => $record->getAdminUrl())
+                            ->url(fn (Tenant $record) => $record->getAdminUrl(), shouldOpenInNewTab: true),
+                        Infolists\Components\TextEntry::make('api_url')
+                            ->label('GraphQL API')
+                            ->getStateUsing(fn (Tenant $record) => $record->getApiUrl())
+                            ->url(fn (Tenant $record) => $record->getApiUrl(), shouldOpenInNewTab: true),
+                    ])
+                    ->columns(3),
+
                 Infolists\Components\Section::make('Subscription')
                     ->schema([
                         Infolists\Components\TextEntry::make('plan.name')
@@ -219,6 +258,23 @@ class TenantResource extends Resource
                             ->dateTime(),
                         Infolists\Components\IconEntry::make('is_active')
                             ->boolean(),
+                    ])
+                    ->columns(3),
+
+                Infolists\Components\Section::make('SSL/Domain')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('ssl_status')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'active' => 'success',
+                                'issuing', 'verifying' => 'warning',
+                                'failed' => 'danger',
+                                default => 'gray',
+                            }),
+                        Infolists\Components\TextEntry::make('ssl_issued_at')
+                            ->dateTime(),
+                        Infolists\Components\TextEntry::make('ssl_expires_at')
+                            ->dateTime(),
                     ])
                     ->columns(3),
             ]);

@@ -7,6 +7,15 @@ use Stancl\Tenancy\Contracts\TenantWithDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDomains;
 
+/**
+ * Tenant represents a hosted Bagisto store
+ *
+ * Each tenant gets:
+ * - Their own Bagisto installation with dedicated MySQL database
+ * - Bagisto GraphQL API at /graphql
+ * - Next.js or default Bagisto storefront
+ * - Custom domain with Let's Encrypt SSL
+ */
 class Tenant extends BaseTenant implements TenantWithDatabase
 {
     use HasDatabase, HasDomains;
@@ -25,9 +34,6 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'currency',
             'timezone',
             'locale',
-            'theme',
-            'logo',
-            'favicon',
             'plan_id',
             'subscription_status',
             'subscription_ends_at',
@@ -37,8 +43,18 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'whmcs_client_id',
             'suspended_at',
             'suspension_reason',
+            // Bagisto installation
+            'bagisto_path',
+            'bagisto_database',
+            'bagisto_version',
+            'bagisto_installed_at',
+            // Storefront
+            'storefront_type', // bagisto_default, nextjs, nuxt
+            // SSL
             'ssl_status',
             'ssl_issued_at',
+            'ssl_expires_at',
+            // Flexible storage
             'settings',
             'data',
         ];
@@ -52,6 +68,8 @@ class Tenant extends BaseTenant implements TenantWithDatabase
         'trial_ends_at' => 'datetime',
         'suspended_at' => 'datetime',
         'ssl_issued_at' => 'datetime',
+        'ssl_expires_at' => 'datetime',
+        'bagisto_installed_at' => 'datetime',
     ];
 
     /**
@@ -194,5 +212,48 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function getPrimaryDomain(): ?string
     {
         return $this->domains()->first()?->domain;
+    }
+
+    /**
+     * Check if Bagisto is installed for this tenant
+     */
+    public function isBagistoInstalled(): bool
+    {
+        return $this->bagisto_installed_at !== null;
+    }
+
+    /**
+     * Get the Bagisto admin panel URL
+     */
+    public function getAdminUrl(): string
+    {
+        $domain = $this->getPrimaryDomain();
+        return $domain ? "https://{$domain}/admin" : '#';
+    }
+
+    /**
+     * Get the Bagisto GraphQL API URL
+     */
+    public function getApiUrl(): string
+    {
+        $domain = $this->getPrimaryDomain();
+        return $domain ? "https://{$domain}/graphql" : '#';
+    }
+
+    /**
+     * Get the storefront URL
+     */
+    public function getStorefrontUrl(): string
+    {
+        $domain = $this->getPrimaryDomain();
+        return $domain ? "https://{$domain}" : '#';
+    }
+
+    /**
+     * Get the Bagisto installation path
+     */
+    public function getBagistoPath(): string
+    {
+        return $this->bagisto_path ?? "/var/www/tenants/{$this->id}";
     }
 }
