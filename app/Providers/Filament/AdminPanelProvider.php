@@ -33,7 +33,6 @@ class AdminPanelProvider extends PanelProvider
                 'warning' => Color::Orange,
             ])
             ->brandName('VumaShops Admin')
-            ->brandLogo(asset('images/logo.svg'))
             ->darkMode(true)
             ->sidebarCollapsibleOnDesktop()
             ->navigationGroups([

@@ -37,15 +37,24 @@ class IdentifyTenant
             return null;
         }
 
-        // Try to find tenant by domain
-        $tenant = Tenant::where('domain', $host)
-            ->orWhereHas('domains', function ($query) use ($host) {
-                $query->where('domain', $host);
-            })
-            ->first();
+        // Try to find tenant by primary domain
+        $tenant = Tenant::where('domain', $host)->first();
 
         if ($tenant) {
             return $tenant;
+        }
+
+        // Try to find by additional domains (if tenant_domains table exists)
+        try {
+            $tenant = Tenant::whereHas('domains', function ($query) use ($host) {
+                $query->where('domain', $host);
+            })->first();
+
+            if ($tenant) {
+                return $tenant;
+            }
+        } catch (\Exception $e) {
+            // tenant_domains table may not exist yet, skip
         }
 
         // Try to find by subdomain

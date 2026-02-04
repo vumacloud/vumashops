@@ -22,7 +22,7 @@ return [
     |
     */
 
-    'central_domains' => array_filter(array_map('trim', explode(',', env('TENANCY_CENTRAL_DOMAINS', 'admin.vumashops.com,vumashops.com')))),
+    'central_domains' => array_filter(array_map('trim', explode(',', env('TENANCY_CENTRAL_DOMAINS', 'shops.vumacloud.com')))),
 
     /*
     |--------------------------------------------------------------------------

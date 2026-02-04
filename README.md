@@ -301,7 +301,8 @@ DO_SPACES_CDN_ENDPOINT=https://vumashops.fra1.cdn.digitaloceanspaces.com
 VUMASHOPS_PLATFORM_DOMAIN=shops.vumacloud.com
 VUMASHOPS_DEMO_DOMAIN=demoshop.vumacloud.com
 VUMASHOPS_SERVER_IP=164.92.184.13
-TENANCY_CENTRAL_DOMAINS=shops.vumacloud.com,demoshop.vumacloud.com
+# NOTE: demoshop.vumacloud.com is a TENANT, not a central domain
+TENANCY_CENTRAL_DOMAINS=shops.vumacloud.com
 
 # Cloudflare (for vendor domain automation)
 CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
