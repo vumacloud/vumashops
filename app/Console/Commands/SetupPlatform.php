@@ -67,7 +67,7 @@ class SetupPlatform extends Command
                 'price_monthly' => 2999,
                 'price_yearly' => 29990,
                 'trial_days' => 14,
-                'features' => [
+                'limits' => [
                     'max_products' => 100,
                     'max_orders' => 500,
                     'max_staff' => 2,
@@ -87,7 +87,7 @@ class SetupPlatform extends Command
                 'price_monthly' => 7999,
                 'price_yearly' => 79990,
                 'trial_days' => 14,
-                'features' => [
+                'limits' => [
                     'max_products' => 1000,
                     'max_orders' => 5000,
                     'max_staff' => 10,
@@ -107,7 +107,7 @@ class SetupPlatform extends Command
                 'price_monthly' => 19999,
                 'price_yearly' => 199990,
                 'trial_days' => 14,
-                'features' => [
+                'limits' => [
                     'max_products' => 0, // unlimited
                     'max_orders' => 0,   // unlimited
                     'max_staff' => 0,    // unlimited
