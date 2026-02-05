@@ -1,59 +1,226 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# VumaShops - Bagisto Hosting Platform
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A multi-tenant e-commerce hosting platform for African businesses, built on Laravel. VumaShops provisions and manages [Bagisto](https://bagisto.com) stores with automatic SSL, WHMCS integration, and African payment gateways.
 
-## About Laravel
+## Architecture
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 VumaShops Central Platform                  │
+│               (shops.vumacloud.com/admin)                   │
+├─────────────────────────────────────────────────────────────┤
+│  - Super Admin Panel (Filament 3)                           │
+│  - Tenant Management                                        │
+│  - WHMCS Provisioning API                                   │
+│  - Bagisto Auto-Provisioning                                │
+│  - SSL/Domain Management (Let's Encrypt)                    │
+│  - Nginx Configuration Generator                            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ Provisions per tenant
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Per-Tenant Bagisto Installation                │
+├─────────────────────────────────────────────────────────────┤
+│  - Full Bagisto e-commerce platform                         │
+│  - GraphQL API (bagisto/headless-ecommerce)                 │
+│  - Storefront: Bagisto default / Next.js / Nuxt             │
+│  - Dedicated MySQL database                                 │
+│  - Custom domain with SSL                                   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### Central Platform
+- **Filament 3 Admin Panel** - Manage all tenants
+- **WHMCS Integration** - Auto-provision from billing system
+- **SSL Automation** - Let's Encrypt certificates
+- **Nginx Management** - Per-tenant configurations
 
-## Learning Laravel
+### Each Tenant Gets
+- **Full Bagisto Installation** - Complete e-commerce platform
+- **GraphQL API** - Via bagisto/headless-ecommerce
+- **Multiple Storefronts** - Bagisto default, Next.js, or Nuxt
+- **Custom Domain** - With automatic SSL
+- **Isolated Database** - Complete data separation
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Requirements
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Ubuntu 22.04 / 24.04 LTS
+- PHP 8.3+
+- MySQL 8.0+ (DigitalOcean Managed recommended)
+- Redis 6+ (DigitalOcean Managed recommended)
+- Nginx
+- Composer 2.x
+- Node.js 20+ (for storefronts)
+- Certbot (for SSL)
 
-## Laravel Sponsors
+## Installation
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### 1. Clone and Install Dependencies
 
-### Premium Partners
+```bash
+cd /var/www
+git clone https://github.com/vumacloud/vumashops.git
+cd vumashops
+composer install --no-dev --optimize-autoloader
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 2. Configure Environment
 
-## Contributing
+```bash
+cp .env.example .env
+php artisan key:generate
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Edit `.env` with your database, Redis, and other settings.
 
-## Code of Conduct
+### 3. Run Setup
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan vumashops:setup --seed
+```
 
-## Security Vulnerabilities
+This will:
+- Run migrations
+- Create default plans (Starter, Business, Enterprise)
+- Prompt you to create a super admin
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 4. Configure Nginx
+
+```bash
+# Generate central platform config
+php artisan tinker --execute="echo app(App\Services\NginxConfigGenerator::class)->generateCentralConfig();"
+
+# Copy output to /etc/nginx/sites-available/shops.vumacloud.com.conf
+# Create symlink to sites-enabled
+# Test and reload: nginx -t && systemctl reload nginx
+```
+
+### 5. Set Up SSL for Central Platform
+
+```bash
+certbot certonly --webroot -w /var/www/certbot -d shops.vumacloud.com
+```
+
+### 6. Configure Cron Jobs
+
+```bash
+# Add to crontab
+* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1
+```
+
+## WHMCS Integration
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/whmcs/create` | POST | Create new tenant |
+| `/api/whmcs/suspend` | POST | Suspend tenant |
+| `/api/whmcs/unsuspend` | POST | Unsuspend tenant |
+| `/api/whmcs/terminate` | POST | Delete tenant |
+| `/api/whmcs/change-plan` | POST | Change subscription |
+| `/api/whmcs/status` | GET | Get tenant status |
+
+### Authentication
+
+Include `X-WHMCS-API-Key` header with your API key.
+
+### Create Tenant Example
+
+```bash
+curl -X POST https://shops.vumacloud.com/api/whmcs/create \
+  -H "X-WHMCS-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_id": 123,
+    "client_id": 456,
+    "domain": "mystore.com",
+    "email": "owner@mystore.com",
+    "name": "My Store",
+    "plan": "business",
+    "country": "KE"
+  }'
+```
+
+## Manual Tenant Provisioning
+
+```bash
+php artisan tenant:provision \
+  --name="Demo Shop" \
+  --email="demo@example.com" \
+  --domain="demoshop.vumacloud.com" \
+  --plan="business" \
+  --password="securepassword123"
+```
+
+## Directory Structure
+
+```
+vumashops/
+├── app/
+│   ├── Console/Commands/     # Artisan commands
+│   ├── Filament/Admin/       # Admin panel resources
+│   ├── Http/Controllers/Api/ # WHMCS API
+│   ├── Models/               # Tenant, Plan, SuperAdmin
+│   └── Services/             # BagistoProvisioner, SslManager, NginxConfigGenerator
+├── config/
+│   ├── tenancy.php           # stancl/tenancy config
+│   └── services.php          # WHMCS, server config
+├── database/
+│   └── migrations/           # Central database only
+└── /var/www/tenants/         # Tenant Bagisto installations
+    └── {tenant-uuid}/        # Each tenant's Bagisto
+```
+
+## African Payment Gateways
+
+VumaShops supports African payment gateways via Bagisto packages:
+
+- **Paystack** - Nigeria, Ghana, Kenya, South Africa
+- **Flutterwave** - 30+ African countries
+- **M-Pesa Kenya** - Safaricom mobile money
+- **MTN MoMo** - MTN mobile money (Uganda, Ghana, etc.)
+- **Airtel Money** - Airtel mobile money
+
+Payment gateway credentials are stored per-tenant in the central database.
+
+## SSL Certificate Renewal
+
+SSL certificates auto-renew via cron. Manual renewal:
+
+```bash
+php artisan ssl:renew
+```
+
+## Environment Variables
+
+Key variables in `.env`:
+
+```env
+# Database
+DB_CONNECTION=central
+DB_HOST=your-db-cluster.db.ondigitalocean.com
+DB_PORT=25060
+DB_DATABASE=vumashops_central
+
+# Redis
+REDIS_HOST=your-redis.db.ondigitalocean.com
+REDIS_PORT=25061
+REDIS_SCHEME=tls
+
+# WHMCS
+WHMCS_API_KEY=your-secure-api-key
+
+# Server
+SERVER_IP=164.92.184.13
+
+# Let's Encrypt
+LETSENCRYPT_EMAIL=admin@vumacloud.com
+```
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+MIT License
