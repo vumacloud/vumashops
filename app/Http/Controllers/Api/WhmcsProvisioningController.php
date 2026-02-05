@@ -3,585 +3,362 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Admin;
 use App\Models\Plan;
 use App\Models\Tenant;
-use App\Services\CloudflareDnsService;
+use App\Services\BagistoProvisioner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class WhmcsProvisioningController extends Controller
 {
-    protected CloudflareDnsService $cloudflare;
+    public function __construct(
+        protected BagistoProvisioner $provisioner
+    ) {
+        $this->middleware(function ($request, $next) {
+            $apiKey = $request->header('X-WHMCS-API-Key') ?? $request->input('api_key');
 
-    public function __construct(CloudflareDnsService $cloudflare)
-    {
-        $this->cloudflare = $cloudflare;
+            if ($apiKey !== config('services.whmcs.api_key')) {
+                return response()->json([
+                    'result' => 'error',
+                    'message' => 'Invalid API key',
+                ], 401);
+            }
+
+            return $next($request);
+        });
     }
 
     /**
-     * Create a new store/tenant account.
-     *
-     * WHMCS sends this on new order activation.
-     *
-     * Expected parameters:
-     * - serviceid: WHMCS service ID (required)
-     * - clientid: WHMCS client ID (required)
-     * - domain: Custom domain for the store (required)
-     * - email: Customer email (required)
-     * - password: Customer password (optional, will generate if not provided)
-     * - firstname: Customer first name (optional)
-     * - lastname: Customer last name (optional)
-     * - plan: Plan slug (optional, defaults to 'starter')
-     * - configoptions: JSON encoded config options from WHMCS (optional)
+     * Create a new tenant with Bagisto installation (WHMCS CreateAccount)
      */
     public function create(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
-            'clientid' => 'required|string',
-            'domain' => 'required|string',
-            'email' => 'required|email',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
+            'client_id' => 'required|integer',
+            'domain' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'name' => 'required|string|max:255',
+            'plan' => 'required|string',
+            'phone' => 'nullable|string|max:20',
+            'country' => 'nullable|string|size:2',
             'password' => 'nullable|string|min:8',
-            'firstname' => 'nullable|string|max:255',
-            'lastname' => 'nullable|string|max:255',
-            'plan' => 'nullable|string',
+            'storefront_type' => 'nullable|string|in:bagisto_default,nextjs,nuxt',
         ]);
 
-        // Check if service already exists
-        $existingTenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
-        if ($existingTenant) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Service already provisioned',
-                'tenant_id' => $existingTenant->id,
-                'domain' => $existingTenant->domain,
-            ], 409);
-        }
-
-        // Check if domain is already in use
-        $domainInUse = Tenant::where('domain', $request->domain)->exists();
-        if ($domainInUse) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Domain is already in use',
-            ], 409);
-        }
-
-        // Find the plan
-        $planSlug = $request->plan ?? 'starter';
-        $plan = Plan::where('slug', $planSlug)->where('is_active', true)->first();
-
-        if (!$plan) {
-            // Fall back to first active plan
-            $plan = Plan::where('is_active', true)->orderBy('sort_order')->first();
-        }
-
-        if (!$plan) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No active plans available',
-            ], 500);
-        }
-
         try {
-            DB::beginTransaction();
+            // Check if tenant already exists
+            $existing = Tenant::where('whmcs_service_id', $validated['service_id'])->first();
+            if ($existing) {
+                return response()->json([
+                    'result' => 'error',
+                    'message' => 'Tenant already exists for this service',
+                    'tenant_id' => $existing->id,
+                    'admin_url' => $existing->getAdminUrl(),
+                ], 409);
+            }
 
-            // Generate store name from domain
-            $storeName = $this->generateStoreName($request->domain, $request->firstname, $request->lastname);
+            // Find the plan
+            $plan = Plan::where('slug', $validated['plan'])
+                ->orWhere('name', $validated['plan'])
+                ->first();
 
-            // Create the tenant
+            if (!$plan) {
+                return response()->json([
+                    'result' => 'error',
+                    'message' => 'Plan not found: ' . $validated['plan'],
+                ], 404);
+            }
+
+            // Create the tenant record
             $tenant = Tenant::create([
-                'name' => $storeName,
-                'email' => $request->email,
-                'domain' => $request->domain,
+                'id' => Str::uuid()->toString(),
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'phone' => $validated['phone'] ?? null,
+                'country' => $validated['country'] ?? 'KE',
+                'currency' => $this->getCurrencyForCountry($validated['country'] ?? 'KE'),
+                'timezone' => $this->getTimezoneForCountry($validated['country'] ?? 'KE'),
+                'locale' => 'en',
                 'plan_id' => $plan->id,
                 'subscription_status' => 'active',
-                'subscription_ends_at' => now()->addYear(), // WHMCS will manage actual expiry
                 'is_active' => true,
-                'currency' => 'USD',
-                'timezone' => 'Africa/Nairobi',
-                'locale' => 'en',
-                'whmcs_service_id' => $request->serviceid,
-                'whmcs_client_id' => $request->clientid,
-                'metadata' => [
-                    'provisioned_at' => now()->toISOString(),
-                    'provisioned_by' => 'whmcs',
-                ],
+                'whmcs_service_id' => $validated['service_id'],
+                'whmcs_client_id' => $validated['client_id'],
+                'trial_ends_at' => $plan->trial_days ? now()->addDays($plan->trial_days) : null,
+                'ssl_status' => 'pending',
             ]);
 
-            // Generate password if not provided
-            $password = $request->password ?? Str::random(12);
-
-            // Create the admin user for the tenant
-            $adminName = trim(($request->firstname ?? '') . ' ' . ($request->lastname ?? ''));
-            if (empty($adminName)) {
-                $adminName = explode('@', $request->email)[0];
-            }
-
-            $admin = Admin::create([
-                'tenant_id' => $tenant->id,
-                'name' => $adminName,
-                'email' => $request->email,
-                'password' => Hash::make($password),
-                'role' => 'owner',
-                'is_active' => true,
-                'email_verified_at' => now(),
+            // Create the domain record
+            $domain = $tenant->domains()->create([
+                'domain' => $this->normalizeDomain($validated['domain']),
             ]);
 
-            // Set up DNS for the domain via Cloudflare (if configured)
-            $dnsResult = null;
-            if (config('services.cloudflare.api_token')) {
-                try {
-                    $dnsResult = $this->cloudflare->addDomainRecord($request->domain);
-                } catch (\Exception $e) {
-                    Log::warning('Failed to set up Cloudflare DNS for tenant', [
-                        'tenant_id' => $tenant->id,
-                        'domain' => $request->domain,
-                        'error' => $e->getMessage(),
-                    ]);
-                    // Don't fail provisioning if DNS fails - can be set up manually
-                }
-            }
+            // Provision Bagisto installation (async via queue in production)
+            $adminPassword = $validated['password'] ?? Str::random(16);
 
-            DB::commit();
+            $this->provisioner->provision($tenant, [
+                'admin_email' => $validated['email'],
+                'admin_password' => $adminPassword,
+                'storefront_type' => $validated['storefront_type'] ?? 'bagisto_default',
+            ]);
 
-            Log::info('WHMCS: Tenant provisioned successfully', [
+            Log::info('WHMCS: Created tenant with Bagisto', [
                 'tenant_id' => $tenant->id,
-                'whmcs_service_id' => $request->serviceid,
-                'domain' => $request->domain,
+                'service_id' => $validated['service_id'],
+                'domain' => $domain->domain,
             ]);
 
             return response()->json([
-                'status' => 'success',
+                'result' => 'success',
                 'message' => 'Store created successfully',
                 'tenant_id' => $tenant->id,
-                'domain' => $tenant->domain,
-                'admin_email' => $admin->email,
-                'admin_password' => $password, // Return so WHMCS can send to customer
-                'login_url' => 'https://' . $tenant->domain . '/admin',
-                'dns_configured' => $dnsResult !== null,
+                'domain' => $domain->domain,
+                'admin_url' => $tenant->getAdminUrl(),
+                'api_url' => $tenant->getApiUrl(),
+                'storefront_url' => $tenant->getStorefrontUrl(),
             ]);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('WHMCS: Failed to provision tenant', [
-                'whmcs_service_id' => $request->serviceid,
+            Log::error('WHMCS: Failed to create tenant', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+                'service_id' => $validated['service_id'],
             ]);
 
             return response()->json([
-                'status' => 'error',
+                'result' => 'error',
                 'message' => 'Failed to create store: ' . $e->getMessage(),
             ], 500);
         }
     }
 
     /**
-     * Suspend a store/tenant account.
-     *
-     * WHMCS sends this when service is suspended (non-payment, abuse, etc).
+     * Suspend a tenant's Bagisto store (WHMCS SuspendAccount)
      */
     public function suspend(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
             'reason' => 'nullable|string|max:500',
         ]);
 
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
+        $tenant = Tenant::where('whmcs_service_id', $validated['service_id'])->first();
 
         if (!$tenant) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
+                'result' => 'error',
+                'message' => 'Tenant not found',
             ], 404);
         }
 
-        if ($tenant->isSuspended()) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Service already suspended',
-            ]);
-        }
+        // Suspend in database
+        $tenant->suspend($validated['reason'] ?? 'Suspended via WHMCS');
 
-        $tenant->suspend($request->reason ?? 'Suspended by WHMCS');
+        // Put Bagisto in maintenance mode
+        $this->provisioner->suspend($tenant);
 
-        Log::info('WHMCS: Tenant suspended', [
+        Log::info('WHMCS: Suspended tenant', [
             'tenant_id' => $tenant->id,
-            'whmcs_service_id' => $request->serviceid,
-            'reason' => $request->reason,
+            'service_id' => $validated['service_id'],
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'result' => 'success',
             'message' => 'Store suspended successfully',
         ]);
     }
 
     /**
-     * Unsuspend a store/tenant account.
-     *
-     * WHMCS sends this when service is unsuspended (payment received, etc).
+     * Unsuspend a tenant's Bagisto store (WHMCS UnsuspendAccount)
      */
     public function unsuspend(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
         ]);
 
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
+        $tenant = Tenant::where('whmcs_service_id', $validated['service_id'])->first();
 
         if (!$tenant) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
+                'result' => 'error',
+                'message' => 'Tenant not found',
             ], 404);
         }
 
-        if (!$tenant->isSuspended()) {
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Service is not suspended',
-            ]);
-        }
-
+        // Unsuspend in database
         $tenant->unsuspend();
 
-        Log::info('WHMCS: Tenant unsuspended', [
+        // Bring Bagisto out of maintenance mode
+        $this->provisioner->unsuspend($tenant);
+
+        Log::info('WHMCS: Unsuspended tenant', [
             'tenant_id' => $tenant->id,
-            'whmcs_service_id' => $request->serviceid,
+            'service_id' => $validated['service_id'],
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'result' => 'success',
             'message' => 'Store unsuspended successfully',
         ]);
     }
 
     /**
-     * Terminate a store/tenant account.
-     *
-     * WHMCS sends this when service is terminated/cancelled.
-     * This soft-deletes the tenant and all associated data.
+     * Terminate a tenant's Bagisto store (WHMCS TerminateAccount)
      */
     public function terminate(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
         ]);
 
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
+        $tenant = Tenant::where('whmcs_service_id', $validated['service_id'])->first();
 
         if (!$tenant) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
+                'result' => 'error',
+                'message' => 'Tenant not found',
             ], 404);
         }
 
-        try {
-            DB::beginTransaction();
+        $tenantId = $tenant->id;
 
-            // Deactivate all admins
-            $tenant->admins()->update(['is_active' => false]);
+        // Delete Bagisto installation and database
+        $this->provisioner->terminate($tenant);
 
-            // Mark tenant as terminated
-            $tenant->update([
-                'subscription_status' => 'terminated',
-                'is_active' => false,
-                'metadata' => array_merge($tenant->metadata ?? [], [
-                    'terminated_at' => now()->toISOString(),
-                    'terminated_by' => 'whmcs',
-                ]),
-            ]);
+        // Delete tenant record
+        $tenant->domains()->delete();
+        $tenant->delete();
 
-            // Soft delete the tenant
-            $tenant->delete();
+        Log::info('WHMCS: Terminated tenant', [
+            'tenant_id' => $tenantId,
+            'service_id' => $validated['service_id'],
+        ]);
 
-            DB::commit();
-
-            Log::info('WHMCS: Tenant terminated', [
-                'tenant_id' => $tenant->id,
-                'whmcs_service_id' => $request->serviceid,
-            ]);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Store terminated successfully',
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('WHMCS: Failed to terminate tenant', [
-                'whmcs_service_id' => $request->serviceid,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to terminate store: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'result' => 'success',
+            'message' => 'Store terminated successfully',
+        ]);
     }
 
     /**
-     * Change the plan for a store/tenant.
-     *
-     * WHMCS sends this on upgrade/downgrade.
+     * Change tenant's plan (WHMCS ChangePackage)
      */
     public function changePlan(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
             'plan' => 'required|string',
         ]);
 
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
+        $tenant = Tenant::where('whmcs_service_id', $validated['service_id'])->first();
 
         if (!$tenant) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
+                'result' => 'error',
+                'message' => 'Tenant not found',
             ], 404);
         }
 
-        $plan = Plan::where('slug', $request->plan)->where('is_active', true)->first();
+        $plan = Plan::where('slug', $validated['plan'])
+            ->orWhere('name', $validated['plan'])
+            ->first();
 
         if (!$plan) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Plan not found: ' . $request->plan,
+                'result' => 'error',
+                'message' => 'Plan not found: ' . $validated['plan'],
             ], 404);
         }
 
-        $oldPlanId = $tenant->plan_id;
         $tenant->update(['plan_id' => $plan->id]);
 
-        Log::info('WHMCS: Tenant plan changed', [
+        Log::info('WHMCS: Changed tenant plan', [
             'tenant_id' => $tenant->id,
-            'whmcs_service_id' => $request->serviceid,
-            'old_plan_id' => $oldPlanId,
-            'new_plan_id' => $plan->id,
-            'new_plan_slug' => $plan->slug,
+            'service_id' => $validated['service_id'],
+            'new_plan' => $plan->slug,
         ]);
 
         return response()->json([
-            'status' => 'success',
+            'result' => 'success',
             'message' => 'Plan changed successfully',
-            'plan' => [
-                'id' => $plan->id,
-                'name' => $plan->name,
-                'slug' => $plan->slug,
-            ],
         ]);
     }
 
     /**
-     * Renew/extend subscription for a store/tenant.
-     *
-     * WHMCS sends this when subscription is renewed.
-     */
-    public function renew(Request $request): JsonResponse
-    {
-        $request->validate([
-            'serviceid' => 'required|string',
-            'expires_at' => 'nullable|date',
-        ]);
-
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
-
-        if (!$tenant) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
-            ], 404);
-        }
-
-        $expiresAt = $request->expires_at
-            ? \Carbon\Carbon::parse($request->expires_at)
-            : now()->addYear();
-
-        $tenant->update([
-            'subscription_status' => 'active',
-            'subscription_ends_at' => $expiresAt,
-            'is_active' => true,
-        ]);
-
-        // Unsuspend if was suspended
-        if ($tenant->suspended_at) {
-            $tenant->update([
-                'suspended_at' => null,
-                'suspension_reason' => null,
-            ]);
-        }
-
-        Log::info('WHMCS: Tenant subscription renewed', [
-            'tenant_id' => $tenant->id,
-            'whmcs_service_id' => $request->serviceid,
-            'expires_at' => $expiresAt->toISOString(),
-        ]);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Subscription renewed successfully',
-            'expires_at' => $expiresAt->toISOString(),
-        ]);
-    }
-
-    /**
-     * Get store/tenant status.
-     *
-     * Useful for WHMCS to check current status.
+     * Get tenant status (for WHMCS admin area)
      */
     public function status(Request $request): JsonResponse
     {
-        $request->validate([
-            'serviceid' => 'required|string',
+        $validated = $request->validate([
+            'service_id' => 'required|integer',
         ]);
 
-        $tenant = Tenant::with('plan')->where('whmcs_service_id', $request->serviceid)->first();
+        $tenant = Tenant::with(['plan', 'domains'])
+            ->where('whmcs_service_id', $validated['service_id'])
+            ->first();
 
         if (!$tenant) {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
+                'result' => 'error',
+                'message' => 'Tenant not found',
             ], 404);
         }
 
         return response()->json([
-            'status' => 'success',
+            'result' => 'success',
             'tenant' => [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
-                'domain' => $tenant->domain,
                 'email' => $tenant->email,
-                'subscription_status' => $tenant->subscription_status,
-                'subscription_ends_at' => $tenant->subscription_ends_at?->toISOString(),
+                'domain' => $tenant->getPrimaryDomain(),
+                'plan' => $tenant->plan?->name,
+                'status' => $tenant->subscription_status,
                 'is_active' => $tenant->is_active,
-                'is_suspended' => $tenant->isSuspended(),
-                'plan' => $tenant->plan ? [
-                    'id' => $tenant->plan->id,
-                    'name' => $tenant->plan->name,
-                    'slug' => $tenant->plan->slug,
-                ] : null,
+                'bagisto_installed' => $tenant->isBagistoInstalled(),
+                'bagisto_version' => $tenant->bagisto_version,
+                'storefront_type' => $tenant->storefront_type,
+                'ssl_status' => $tenant->ssl_status,
+                'admin_url' => $tenant->getAdminUrl(),
+                'api_url' => $tenant->getApiUrl(),
+                'storefront_url' => $tenant->getStorefrontUrl(),
                 'created_at' => $tenant->created_at->toISOString(),
             ],
         ]);
     }
 
-    /**
-     * Update store/tenant details.
-     *
-     * WHMCS sends this when customer updates their domain or details.
-     */
-    public function update(Request $request): JsonResponse
+    private function getCurrencyForCountry(string $country): string
     {
-        $request->validate([
-            'serviceid' => 'required|string',
-            'domain' => 'nullable|string',
-            'email' => 'nullable|email',
-        ]);
-
-        $tenant = Tenant::where('whmcs_service_id', $request->serviceid)->first();
-
-        if (!$tenant) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Service not found',
-            ], 404);
-        }
-
-        $updates = [];
-
-        // Update domain if provided and different
-        if ($request->has('domain') && $request->domain !== $tenant->domain) {
-            // Check if new domain is already in use
-            $domainInUse = Tenant::where('domain', $request->domain)
-                ->where('id', '!=', $tenant->id)
-                ->exists();
-
-            if ($domainInUse) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Domain is already in use',
-                ], 409);
-            }
-
-            $updates['domain'] = $request->domain;
-
-            // Update DNS if Cloudflare is configured
-            if (config('services.cloudflare.api_token')) {
-                try {
-                    // Remove old domain record
-                    $this->cloudflare->removeDomainRecord($tenant->domain);
-                    // Add new domain record
-                    $this->cloudflare->addDomainRecord($request->domain);
-                } catch (\Exception $e) {
-                    Log::warning('Failed to update Cloudflare DNS for domain change', [
-                        'tenant_id' => $tenant->id,
-                        'old_domain' => $tenant->domain,
-                        'new_domain' => $request->domain,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-        }
-
-        // Update email if provided
-        if ($request->has('email') && $request->email !== $tenant->email) {
-            $updates['email'] = $request->email;
-
-            // Also update the owner admin's email
-            $tenant->admins()->where('role', 'owner')->update(['email' => $request->email]);
-        }
-
-        if (!empty($updates)) {
-            $tenant->update($updates);
-
-            Log::info('WHMCS: Tenant updated', [
-                'tenant_id' => $tenant->id,
-                'whmcs_service_id' => $request->serviceid,
-                'updates' => array_keys($updates),
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Store updated successfully',
-        ]);
+        return match ($country) {
+            'KE' => 'KES',
+            'TZ' => 'TZS',
+            'UG' => 'UGX',
+            'RW' => 'RWF',
+            'NG' => 'NGN',
+            'GH' => 'GHS',
+            'ZA' => 'ZAR',
+            default => 'USD',
+        };
     }
 
-    /**
-     * Generate a store name from domain or customer name.
-     */
-    protected function generateStoreName(string $domain, ?string $firstName, ?string $lastName): string
+    private function getTimezoneForCountry(string $country): string
     {
-        // If we have customer name, use it
-        if ($firstName || $lastName) {
-            $name = trim("$firstName $lastName");
-            if (!empty($name)) {
-                return $name . "'s Store";
-            }
-        }
+        return match ($country) {
+            'KE', 'TZ', 'UG' => 'Africa/Nairobi',
+            'RW' => 'Africa/Kigali',
+            'NG' => 'Africa/Lagos',
+            'GH' => 'Africa/Accra',
+            'ZA' => 'Africa/Johannesburg',
+            default => 'UTC',
+        };
+    }
 
-        // Otherwise generate from domain
-        $domainParts = explode('.', $domain);
-        $name = $domainParts[0];
-
-        // Clean up common prefixes
-        $name = preg_replace('/^(www|shop|store|my)[-_]?/i', '', $name);
-
-        // Convert to title case
-        $name = Str::title(str_replace(['-', '_'], ' ', $name));
-
-        return $name ?: 'My Store';
+    private function normalizeDomain(string $domain): string
+    {
+        $domain = preg_replace('#^https?://#', '', $domain);
+        $domain = rtrim($domain, '/');
+        return strtolower($domain);
     }
 }

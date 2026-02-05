@@ -2,8 +2,8 @@
 
 namespace App\Providers\Filament;
 
-use App\Providers\TenancyServiceProvider;
 use Filament\Http\Middleware\Authenticate;
+use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Pages;
@@ -15,9 +15,10 @@ use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
-use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
+use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 class TenantPanelProvider extends PanelProvider
 {
@@ -25,27 +26,19 @@ class TenantPanelProvider extends PanelProvider
     {
         return $panel
             ->id('tenant')
-            ->path('admin')
+            ->path('manage')
             ->login()
             ->registration()
             ->passwordReset()
+            ->emailVerification()
+            ->brandName(fn () => tenant('name') ?? 'My Store')
             ->colors([
                 'primary' => Color::Blue,
-                'danger' => Color::Rose,
+                'danger' => Color::Red,
                 'success' => Color::Emerald,
                 'warning' => Color::Amber,
             ])
-            ->brandName(fn () => TenancyServiceProvider::getTenant()?->name ?? 'VumaShops')
-            ->darkMode(true)
-            ->sidebarCollapsibleOnDesktop()
-            ->navigationGroups([
-                'Shop',
-                'Sales',
-                'Customers',
-                'Marketing',
-                'Reports',
-                'Settings',
-            ])
+            ->authGuard('web')
             ->discoverResources(in: app_path('Filament/Tenant/Resources'), for: 'App\\Filament\\Tenant\\Resources')
             ->discoverPages(in: app_path('Filament/Tenant/Pages'), for: 'App\\Filament\\Tenant\\Pages')
             ->pages([
@@ -54,10 +47,6 @@ class TenantPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Tenant/Widgets'), for: 'App\\Filament\\Tenant\\Widgets')
             ->widgets([
                 Widgets\AccountWidget::class,
-                \App\Filament\Tenant\Widgets\StoreStatsWidget::class,
-                \App\Filament\Tenant\Widgets\SalesChartWidget::class,
-                \App\Filament\Tenant\Widgets\RecentOrdersWidget::class,
-                \App\Filament\Tenant\Widgets\TopProductsWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -69,16 +58,14 @@ class TenantPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-                \App\Http\Middleware\IdentifyTenant::class,
+                InitializeTenancyByDomain::class,
+                PreventAccessFromCentralDomains::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
             ])
-            ->authGuard('admin')
             ->databaseNotifications()
-            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
-            ->plugins([
-                // Add any Filament plugins here
-            ]);
+            ->sidebarCollapsibleOnDesktop()
+            ->maxContentWidth('full');
     }
 }

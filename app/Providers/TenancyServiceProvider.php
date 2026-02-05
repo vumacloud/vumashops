@@ -1,65 +1,148 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
-use App\Models\Tenant;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\View;
+use Stancl\JobPipeline\JobPipeline;
+use Stancl\Tenancy\Events;
+use Stancl\Tenancy\Jobs;
+use Stancl\Tenancy\Listeners;
+use Stancl\Tenancy\Middleware;
 
 class TenancyServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
+    // By default, no namespace is used to support the callable array syntax.
+    public static string $controllerNamespace = '';
+
+    public function events()
     {
-        $this->app->singleton('current.tenant', function () {
-            return null;
-        });
+        return [
+            // Tenant events
+            Events\CreatingTenant::class => [],
+            Events\TenantCreated::class => [
+                JobPipeline::make([
+                    Jobs\CreateDatabase::class,
+                    Jobs\MigrateDatabase::class,
+                    // Jobs\SeedDatabase::class,
+
+                    // Your own jobs to prepare the tenant.
+                    // Provision API keys, create S3 buckets, anything you want!
+
+                ])->send(function (Events\TenantCreated $event) {
+                    return $event->tenant;
+                })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+            ],
+            Events\SavingTenant::class => [],
+            Events\TenantSaved::class => [],
+            Events\UpdatingTenant::class => [],
+            Events\TenantUpdated::class => [],
+            Events\DeletingTenant::class => [],
+            Events\TenantDeleted::class => [
+                JobPipeline::make([
+                    Jobs\DeleteDatabase::class,
+                ])->send(function (Events\TenantDeleted $event) {
+                    return $event->tenant;
+                })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
+            ],
+
+            // Domain events
+            Events\CreatingDomain::class => [],
+            Events\DomainCreated::class => [],
+            Events\SavingDomain::class => [],
+            Events\DomainSaved::class => [],
+            Events\UpdatingDomain::class => [],
+            Events\DomainUpdated::class => [],
+            Events\DeletingDomain::class => [],
+            Events\DomainDeleted::class => [],
+
+            // Database events
+            Events\DatabaseCreated::class => [],
+            Events\DatabaseMigrated::class => [],
+            Events\DatabaseSeeded::class => [],
+            Events\DatabaseRolledBack::class => [],
+            Events\DatabaseDeleted::class => [],
+
+            // Tenancy events
+            Events\InitializingTenancy::class => [],
+            Events\TenancyInitialized::class => [
+                Listeners\BootstrapTenancy::class,
+            ],
+
+            Events\EndingTenancy::class => [],
+            Events\TenancyEnded::class => [
+                Listeners\RevertToCentralContext::class,
+            ],
+
+            Events\BootstrappingTenancy::class => [],
+            Events\TenancyBootstrapped::class => [],
+            Events\RevertingToCentralContext::class => [],
+            Events\RevertedToCentralContext::class => [],
+
+            // Resource syncing
+            Events\SyncedResourceSaved::class => [
+                Listeners\UpdateSyncedResource::class,
+            ],
+
+            // Fired only when a synced resource is changed in a different DB than the origin DB (to avoid infinite loops)
+            Events\SyncedResourceChangedInForeignDatabase::class => [],
+        ];
     }
 
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
+    public function register()
     {
-        // Share current tenant with all views
-        View::composer('*', function ($view) {
-            $view->with('currentTenant', app('current.tenant'));
-        });
+        //
     }
 
-    /**
-     * Set the current tenant.
-     */
-    public static function setTenant(?Tenant $tenant): void
+    public function boot()
     {
-        app()->instance('current.tenant', $tenant);
+        $this->bootEvents();
+        $this->mapRoutes();
 
-        if ($tenant) {
-            session(['tenant_id' => $tenant->id]);
+        $this->makeTenancyMiddlewareHighestPriority();
+    }
 
-            // Set locale
-            app()->setLocale($tenant->locale ?? 'en');
+    protected function bootEvents()
+    {
+        foreach ($this->events() as $event => $listeners) {
+            foreach ($listeners as $listener) {
+                if ($listener instanceof JobPipeline) {
+                    $listener = $listener->toListener();
+                }
 
-            // Set timezone
-            config(['app.timezone' => $tenant->timezone ?? 'Africa/Nairobi']);
+                Event::listen($event, $listener);
+            }
         }
     }
 
-    /**
-     * Get the current tenant.
-     */
-    public static function getTenant(): ?Tenant
+    protected function mapRoutes()
     {
-        return app('current.tenant');
+        $this->app->booted(function () {
+            if (file_exists(base_path('routes/tenant.php'))) {
+                Route::namespace(static::$controllerNamespace)
+                    ->group(base_path('routes/tenant.php'));
+            }
+        });
     }
 
-    /**
-     * Check if we're in a tenant context.
-     */
-    public static function hasTenant(): bool
+    protected function makeTenancyMiddlewareHighestPriority()
     {
-        return app('current.tenant') !== null;
+        $tenancyMiddleware = [
+            // Even higher priority than the initialization middleware
+            Middleware\PreventAccessFromCentralDomains::class,
+
+            Middleware\InitializeTenancyByDomain::class,
+            Middleware\InitializeTenancyBySubdomain::class,
+            Middleware\InitializeTenancyByDomainOrSubdomain::class,
+            Middleware\InitializeTenancyByPath::class,
+            Middleware\InitializeTenancyByRequestData::class,
+        ];
+
+        foreach (array_reverse($tenancyMiddleware) as $middleware) {
+            $this->app[\Illuminate\Contracts\Http\Kernel::class]->prependToMiddlewarePriority($middleware);
+        }
     }
 }

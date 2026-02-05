@@ -2,132 +2,100 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Plan extends Model
 {
-    use HasFactory, SoftDeletes;
+    use SoftDeletes;
+
+    protected $connection = 'central';
 
     protected $fillable = [
         'name',
         'slug',
         'description',
-        'monthly_price',
-        'yearly_price',
+        'price_monthly',
+        'price_yearly',
         'currency',
-        'trial_days',
         'limits',
         'features',
         'is_active',
         'is_featured',
+        'trial_days',
         'sort_order',
-        'metadata',
+        'whmcs_product_id',
     ];
 
     protected $casts = [
-        'monthly_price' => 'decimal:2',
-        'yearly_price' => 'decimal:2',
-        'trial_days' => 'integer',
+        'price_monthly' => 'decimal:2',
+        'price_yearly' => 'decimal:2',
         'limits' => 'array',
         'features' => 'array',
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
+        'trial_days' => 'integer',
         'sort_order' => 'integer',
-        'metadata' => 'array',
     ];
 
-    protected $attributes = [
-        'is_active' => true,
-        'is_featured' => false,
-        'trial_days' => 14,
-        'currency' => 'USD',
-        'sort_order' => 0,
-        'limits' => '{}',
-        'features' => '[]',
-        'metadata' => '{}',
-    ];
-
-    public function tenants(): HasMany
+    /**
+     * Get all tenants on this plan
+     */
+    public function tenants()
     {
         return $this->hasMany(Tenant::class);
     }
 
-    public function subscriptions(): HasMany
-    {
-        return $this->hasMany(Subscription::class);
-    }
-
-    public function getLimit(string $key, $default = 0)
-    {
-        return data_get($this->limits, $key, $default);
-    }
-
-    public function hasFeature(string $feature): bool
-    {
-        return in_array($feature, $this->features ?? []);
-    }
-
-    public function getYearlySavings(): float
-    {
-        $monthlyTotal = $this->monthly_price * 12;
-        return $monthlyTotal - $this->yearly_price;
-    }
-
-    public function getYearlySavingsPercentage(): float
-    {
-        $monthlyTotal = $this->monthly_price * 12;
-        if ($monthlyTotal == 0) return 0;
-        return round((($monthlyTotal - $this->yearly_price) / $monthlyTotal) * 100, 1);
-    }
-
+    /**
+     * Scope to only active plans
+     */
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
     }
 
-    public function scopeFeatured($query)
-    {
-        return $query->where('is_featured', true);
-    }
-
+    /**
+     * Scope to order by sort order
+     */
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('monthly_price');
+        return $query->orderBy('sort_order');
     }
 
-    public static function getDefaultPlanLimits(): array
+    /**
+     * Get a specific limit value
+     */
+    public function getLimit(string $key, $default = 0)
     {
-        return [
-            'products' => 50,
-            'categories' => 10,
-            'attributes' => 20,
-            'attribute_families' => 5,
-            'orders' => 100,
-            'staff_accounts' => 2,
-            'storage_mb' => 500,
-            'custom_domain' => false,
-            'api_access' => false,
-            'priority_support' => false,
-            'analytics' => 'basic',
-            'export_data' => true,
-            'import_data' => true,
-            'bulk_operations' => false,
-            'multiple_currencies' => false,
-            'multiple_languages' => false,
-        ];
+        return data_get($this->limits, $key, $default);
     }
 
-    public static function boot()
+    /**
+     * Check if plan has a feature
+     */
+    public function hasFeature(string $key): bool
     {
-        parent::boot();
+        $value = data_get($this->limits, $key);
 
-        static::creating(function ($plan) {
-            if (empty($plan->slug)) {
-                $plan->slug = \Illuminate\Support\Str::slug($plan->name);
-            }
-        });
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return $value !== 0 && $value !== null;
+    }
+
+    /**
+     * Get yearly discount percentage
+     */
+    public function getYearlyDiscountAttribute(): float
+    {
+        if (!$this->price_monthly || !$this->price_yearly) {
+            return 0;
+        }
+
+        $yearlyAtMonthlyRate = $this->price_monthly * 12;
+        $savings = $yearlyAtMonthlyRate - $this->price_yearly;
+
+        return round(($savings / $yearlyAtMonthlyRate) * 100, 1);
     }
 }

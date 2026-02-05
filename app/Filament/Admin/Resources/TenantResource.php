@@ -3,14 +3,16 @@
 namespace App\Filament\Admin\Resources;
 
 use App\Filament\Admin\Resources\TenantResource\Pages;
+use App\Models\Plan;
 use App\Models\Tenant;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TenantResource extends Resource
 {
@@ -18,11 +20,9 @@ class TenantResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-building-storefront';
 
-    protected static ?string $navigationGroup = 'Tenants';
+    protected static ?string $navigationGroup = 'Tenant Management';
 
     protected static ?int $navigationSort = 1;
-
-    protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Form $form): Form
     {
@@ -32,101 +32,91 @@ class TenantResource extends Resource
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->required()
-                            ->maxLength(255)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(fn ($state, $set) => $set('slug', \Str::slug($state))),
-
-                        Forms\Components\TextInput::make('slug')
-                            ->required()
-                            ->unique(ignoreRecord: true),
-
+                            ->maxLength(255),
                         Forms\Components\TextInput::make('email')
                             ->email()
                             ->required()
-                            ->unique(ignoreRecord: true),
-
-                        Forms\Components\TextInput::make('phone'),
-
-                        Forms\Components\TextInput::make('domain')
-                            ->url()
-                            ->unique(ignoreRecord: true),
-
-                        Forms\Components\TextInput::make('subdomain')
                             ->unique(ignoreRecord: true)
-                            ->suffix('.vumashops.com'),
+                            ->maxLength(255),
+                        Forms\Components\TextInput::make('phone')
+                            ->tel()
+                            ->maxLength(20),
+                    ])
+                    ->columns(2),
 
-                        Forms\Components\Textarea::make('description')
-                            ->rows(3)
-                            ->columnSpanFull(),
-                    ])->columns(2),
-
-                Forms\Components\Section::make('Location & Currency')
+                Forms\Components\Section::make('Localization')
                     ->schema([
                         Forms\Components\Select::make('country')
-                            ->options(config('app.supported_countries'))
+                            ->options([
+                                'KE' => 'Kenya',
+                                'TZ' => 'Tanzania',
+                                'UG' => 'Uganda',
+                                'RW' => 'Rwanda',
+                                'NG' => 'Nigeria',
+                                'GH' => 'Ghana',
+                                'ZA' => 'South Africa',
+                            ])
                             ->default('KE')
-                            ->required()
-                            ->reactive()
-                            ->afterStateUpdated(fn ($state, $set) => $set('currency', country_currency($state))),
-
+                            ->required(),
                         Forms\Components\Select::make('currency')
-                            ->options(array_combine(
-                                array_keys(config('app.supported_currencies')),
-                                array_map(fn($c) => $c['name'] . ' (' . $c['symbol'] . ')', config('app.supported_currencies'))
-                            ))
+                            ->options([
+                                'KES' => 'KES - Kenyan Shilling',
+                                'TZS' => 'TZS - Tanzanian Shilling',
+                                'UGX' => 'UGX - Ugandan Shilling',
+                                'RWF' => 'RWF - Rwandan Franc',
+                                'NGN' => 'NGN - Nigerian Naira',
+                                'GHS' => 'GHS - Ghanaian Cedi',
+                                'ZAR' => 'ZAR - South African Rand',
+                                'USD' => 'USD - US Dollar',
+                            ])
                             ->default('KES')
                             ->required(),
-
                         Forms\Components\Select::make('timezone')
                             ->options([
-                                'Africa/Nairobi' => 'East Africa Time (Nairobi)',
-                                'Africa/Lagos' => 'West Africa Time (Lagos)',
-                                'Africa/Johannesburg' => 'South Africa Time (Johannesburg)',
-                                'Africa/Cairo' => 'Egypt Time (Cairo)',
-                                'Africa/Casablanca' => 'Morocco Time (Casablanca)',
+                                'Africa/Nairobi' => 'Africa/Nairobi (EAT)',
+                                'Africa/Dar_es_Salaam' => 'Africa/Dar_es_Salaam (EAT)',
+                                'Africa/Kampala' => 'Africa/Kampala (EAT)',
+                                'Africa/Kigali' => 'Africa/Kigali (CAT)',
+                                'Africa/Lagos' => 'Africa/Lagos (WAT)',
+                                'Africa/Accra' => 'Africa/Accra (GMT)',
+                                'Africa/Johannesburg' => 'Africa/Johannesburg (SAST)',
                             ])
-                            ->default('Africa/Nairobi'),
-
-                        Forms\Components\TextInput::make('address'),
-                        Forms\Components\TextInput::make('city'),
-                        Forms\Components\TextInput::make('state'),
-                        Forms\Components\TextInput::make('postal_code'),
-                    ])->columns(2),
+                            ->default('Africa/Nairobi')
+                            ->required(),
+                    ])
+                    ->columns(3),
 
                 Forms\Components\Section::make('Subscription')
                     ->schema([
                         Forms\Components\Select::make('plan_id')
                             ->relationship('plan', 'name')
-                            ->preload(),
-
+                            ->required(),
                         Forms\Components\Select::make('subscription_status')
                             ->options([
                                 'trial' => 'Trial',
                                 'active' => 'Active',
-                                'past_due' => 'Past Due',
                                 'cancelled' => 'Cancelled',
+                                'suspended' => 'Suspended',
                                 'expired' => 'Expired',
                             ])
-                            ->default('trial'),
-
+                            ->default('trial')
+                            ->required(),
                         Forms\Components\DateTimePicker::make('trial_ends_at'),
-
                         Forms\Components\DateTimePicker::make('subscription_ends_at'),
-                    ])->columns(2),
-
-                Forms\Components\Section::make('Status')
-                    ->schema([
                         Forms\Components\Toggle::make('is_active')
                             ->default(true),
+                    ])
+                    ->columns(2),
 
-                        Forms\Components\FileUpload::make('logo')
-                            ->image()
-                            ->directory('tenants/logos'),
-
-                        Forms\Components\FileUpload::make('favicon')
-                            ->image()
-                            ->directory('tenants/favicons'),
-                    ])->columns(3),
+                Forms\Components\Section::make('WHMCS Integration')
+                    ->schema([
+                        Forms\Components\TextInput::make('whmcs_service_id')
+                            ->numeric(),
+                        Forms\Components\TextInput::make('whmcs_client_id')
+                            ->numeric(),
+                    ])
+                    ->columns(2)
+                    ->collapsible(),
             ]);
     }
 
@@ -134,48 +124,37 @@ class TenantResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('logo')
-                    ->circular()
-                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->name)),
-
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
-
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
-
-                Tables\Columns\TextColumn::make('domain')
-                    ->searchable()
-                    ->toggleable(),
-
                 Tables\Columns\TextColumn::make('plan.name')
                     ->badge(),
-
                 Tables\Columns\TextColumn::make('subscription_status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'active' => 'success',
                         'trial' => 'info',
-                        'past_due' => 'warning',
-                        'cancelled', 'expired' => 'danger',
+                        'suspended' => 'danger',
+                        'cancelled', 'expired' => 'gray',
                         default => 'gray',
                     }),
-
                 Tables\Columns\TextColumn::make('country')
                     ->toggleable(),
-
-                Tables\Columns\TextColumn::make('products_count')
-                    ->counts('products')
-                    ->label('Products'),
-
-                Tables\Columns\TextColumn::make('orders_count')
-                    ->counts('orders')
-                    ->label('Orders'),
-
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean(),
-
+                Tables\Columns\TextColumn::make('domains.domain')
+                    ->label('Domain')
+                    ->limit(30),
+                Tables\Columns\IconColumn::make('bagisto_installed_at')
+                    ->label('Bagisto')
+                    ->boolean()
+                    ->getStateUsing(fn (Tenant $record) => $record->isBagistoInstalled()),
+                Tables\Columns\TextColumn::make('storefront_type')
+                    ->label('Storefront')
+                    ->badge()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -186,43 +165,124 @@ class TenantResource extends Resource
                     ->options([
                         'trial' => 'Trial',
                         'active' => 'Active',
-                        'past_due' => 'Past Due',
                         'cancelled' => 'Cancelled',
+                        'suspended' => 'Suspended',
                         'expired' => 'Expired',
                     ]),
-
-                Tables\Filters\SelectFilter::make('country')
-                    ->options(config('app.supported_countries')),
-
                 Tables\Filters\SelectFilter::make('plan')
                     ->relationship('plan', 'name'),
-
                 Tables\Filters\TernaryFilter::make('is_active'),
-
-                Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('login')
-                    ->icon('heroicon-o-arrow-right-on-rectangle')
-                    ->url(fn (Tenant $record) => 'https://' . ($record->domain ?? $record->subdomain . '.vumashops.com') . '/admin')
-                    ->openUrlInNewTab(),
+                Tables\Actions\Action::make('admin')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('info')
+                    ->url(fn (Tenant $record) => $record->getAdminUrl(), shouldOpenInNewTab: true)
+                    ->visible(fn (Tenant $record) => $record->isBagistoInstalled()),
+                Tables\Actions\Action::make('suspend')
+                    ->icon('heroicon-o-pause-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->visible(fn (Tenant $record) => !$record->isSuspended())
+                    ->action(fn (Tenant $record) => $record->suspend('Suspended by admin')),
+                Tables\Actions\Action::make('unsuspend')
+                    ->icon('heroicon-o-play-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (Tenant $record) => $record->isSuspended())
+                    ->action(fn (Tenant $record) => $record->unsuspend()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\ForceDeleteBulkAction::make(),
-                    Tables\Actions\RestoreBulkAction::make(),
                 ]),
+            ]);
+    }
+
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist
+            ->schema([
+                Infolists\Components\Section::make('Store Information')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('name'),
+                        Infolists\Components\TextEntry::make('email'),
+                        Infolists\Components\TextEntry::make('phone'),
+                        Infolists\Components\TextEntry::make('domains.domain')
+                            ->label('Domain'),
+                    ])
+                    ->columns(2),
+
+                Infolists\Components\Section::make('Bagisto Installation')
+                    ->schema([
+                        Infolists\Components\IconEntry::make('bagisto_installed')
+                            ->label('Installed')
+                            ->boolean()
+                            ->getStateUsing(fn (Tenant $record) => $record->isBagistoInstalled()),
+                        Infolists\Components\TextEntry::make('bagisto_version')
+                            ->label('Version'),
+                        Infolists\Components\TextEntry::make('storefront_type')
+                            ->label('Storefront')
+                            ->badge(),
+                        Infolists\Components\TextEntry::make('bagisto_installed_at')
+                            ->label('Installed At')
+                            ->dateTime(),
+                        Infolists\Components\TextEntry::make('admin_url')
+                            ->label('Admin Panel')
+                            ->getStateUsing(fn (Tenant $record) => $record->getAdminUrl())
+                            ->url(fn (Tenant $record) => $record->getAdminUrl(), shouldOpenInNewTab: true),
+                        Infolists\Components\TextEntry::make('api_url')
+                            ->label('GraphQL API')
+                            ->getStateUsing(fn (Tenant $record) => $record->getApiUrl())
+                            ->url(fn (Tenant $record) => $record->getApiUrl(), shouldOpenInNewTab: true),
+                    ])
+                    ->columns(3),
+
+                Infolists\Components\Section::make('Subscription')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('plan.name')
+                            ->badge(),
+                        Infolists\Components\TextEntry::make('subscription_status')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'active' => 'success',
+                                'trial' => 'info',
+                                'suspended' => 'danger',
+                                default => 'gray',
+                            }),
+                        Infolists\Components\TextEntry::make('trial_ends_at')
+                            ->dateTime(),
+                        Infolists\Components\TextEntry::make('subscription_ends_at')
+                            ->dateTime(),
+                        Infolists\Components\IconEntry::make('is_active')
+                            ->boolean(),
+                    ])
+                    ->columns(3),
+
+                Infolists\Components\Section::make('SSL/Domain')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('ssl_status')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'active' => 'success',
+                                'issuing', 'verifying' => 'warning',
+                                'failed' => 'danger',
+                                default => 'gray',
+                            }),
+                        Infolists\Components\TextEntry::make('ssl_issued_at')
+                            ->dateTime(),
+                        Infolists\Components\TextEntry::make('ssl_expires_at')
+                            ->dateTime(),
+                    ])
+                    ->columns(3),
             ]);
     }
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
@@ -233,18 +293,5 @@ class TenantResource extends Resource
             'view' => Pages\ViewTenant::route('/{record}'),
             'edit' => Pages\EditTenant::route('/{record}/edit'),
         ];
-    }
-
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
-    }
-
-    public static function getNavigationBadge(): ?string
-    {
-        return static::getModel()::count();
     }
 }

@@ -2,145 +2,158 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Admin;
 use App\Models\Plan;
-use App\Models\Tenant;
+use App\Models\SuperAdmin;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Hash;
+
 class SetupPlatform extends Command
 {
-    protected $signature = 'vumashops:setup {--fresh : Drop all data first}';
-    protected $description = 'Setup VumaShops platform with initial data';
+    protected $signature = 'vumashops:setup
+                            {--fresh : Drop and recreate all tables}
+                            {--seed : Seed default data}';
+
+    protected $description = 'Set up the VumaShops central platform';
 
     public function handle(): int
     {
-        $this->info('Setting up VumaShops platform...');
+        $this->info('Setting up VumaShops Central Platform...');
+        $this->newLine();
 
+        // Run migrations
         if ($this->option('fresh')) {
-            $this->warn('Clearing existing data...');
-            Admin::query()->delete();
-            Tenant::query()->delete();
-            Plan::query()->delete();
+            $this->warn('Dropping all tables and re-migrating...');
+            $this->call('migrate:fresh', ['--force' => true]);
+        } else {
+            $this->info('Running migrations...');
+            $this->call('migrate', ['--force' => true]);
         }
 
-        // 1. Create Plans
-        $this->createPlans();
+        // Seed default data
+        if ($this->option('seed') || $this->option('fresh')) {
+            $this->seedDefaultData();
+        }
 
-        // 2. Create Super Admin (no tenant)
-        $this->createSuperAdmin();
-
-        // 3. Create Demo Tenant and Admin
-        $this->createDemoShop();
+        // Create super admin if none exists
+        if (SuperAdmin::count() === 0) {
+            $this->createSuperAdmin();
+        }
 
         $this->newLine();
-        $this->info('✓ VumaShops setup complete!');
+        $this->info('VumaShops setup complete!');
         $this->newLine();
 
-        $this->table(['Item', 'Value'], [
-            ['Platform URL', 'https://shops.vumacloud.com'],
-            ['Super Admin', 'https://shops.vumacloud.com/super-admin'],
-            ['Super Admin Email', 'admin@vumacloud.com'],
-            ['Super Admin Password', 'password'],
-            ['Demo Shop URL', 'https://demoshop.vumacloud.com'],
-            ['Demo Admin Email', 'demo@vumacloud.com'],
-            ['Demo Admin Password', 'demo123'],
+        $this->table(['Component', 'Status'], [
+            ['Database', 'Migrated'],
+            ['Plans', Plan::count() . ' plans'],
+            ['Super Admins', SuperAdmin::count() . ' admins'],
         ]);
 
-        $this->warn('⚠ Change these passwords in production!');
+        $this->newLine();
+        $this->info('Access the admin panel at: /admin');
 
         return Command::SUCCESS;
     }
 
-    protected function createPlans(): void
+    protected function seedDefaultData(): void
     {
-        $this->info('Creating plans...');
+        $this->info('Seeding default plans...');
 
         $plans = [
             [
                 'name' => 'Starter',
                 'slug' => 'starter',
-                'description' => 'Perfect for small businesses just getting started',
-                'limits' => ['products' => 50, 'categories' => 10, 'staff' => 2],
+                'description' => 'Perfect for small businesses getting started',
+                'price_monthly' => 2999,
+                'price_yearly' => 29990,
+                'trial_days' => 14,
+                'limits' => [
+                    'max_products' => 100,
+                    'max_orders' => 500,
+                    'max_staff' => 2,
+                    'storage_gb' => 5,
+                    'custom_domain' => true,
+                    'ssl_certificate' => true,
+                    'analytics' => false,
+                    'api_access' => false,
+                ],
                 'is_active' => true,
+                'sort_order' => 1,
             ],
             [
-                'name' => 'Growth',
-                'slug' => 'growth',
-                'description' => 'For growing businesses with more products',
-                'limits' => ['products' => 500, 'categories' => 50, 'staff' => 5],
+                'name' => 'Business',
+                'slug' => 'business',
+                'description' => 'For growing businesses with more needs',
+                'price_monthly' => 7999,
+                'price_yearly' => 79990,
+                'trial_days' => 14,
+                'limits' => [
+                    'max_products' => 1000,
+                    'max_orders' => 5000,
+                    'max_staff' => 10,
+                    'storage_gb' => 25,
+                    'custom_domain' => true,
+                    'ssl_certificate' => true,
+                    'analytics' => true,
+                    'api_access' => true,
+                ],
                 'is_active' => true,
+                'sort_order' => 2,
             ],
             [
-                'name' => 'Professional',
-                'slug' => 'professional',
-                'description' => 'For established businesses',
-                'limits' => ['products' => 5000, 'categories' => 200, 'staff' => 15],
+                'name' => 'Enterprise',
+                'slug' => 'enterprise',
+                'description' => 'Unlimited everything for large businesses',
+                'price_monthly' => 19999,
+                'price_yearly' => 199990,
+                'trial_days' => 14,
+                'limits' => [
+                    'max_products' => 0, // unlimited
+                    'max_orders' => 0,   // unlimited
+                    'max_staff' => 0,    // unlimited
+                    'storage_gb' => 100,
+                    'custom_domain' => true,
+                    'ssl_certificate' => true,
+                    'analytics' => true,
+                    'api_access' => true,
+                    'priority_support' => true,
+                ],
                 'is_active' => true,
+                'sort_order' => 3,
             ],
         ];
 
-        foreach ($plans as $plan) {
-            Plan::updateOrCreate(['slug' => $plan['slug']], $plan);
+        foreach ($plans as $planData) {
+            Plan::updateOrCreate(
+                ['slug' => $planData['slug']],
+                $planData
+            );
         }
 
-        $this->info('  ✓ Created ' . count($plans) . ' plans');
+        $this->info('Created ' . count($plans) . ' plans');
     }
 
     protected function createSuperAdmin(): void
     {
         $this->info('Creating super admin...');
+        $this->newLine();
 
-        Admin::updateOrCreate(
-            ['email' => 'admin@vumacloud.com', 'tenant_id' => null],
-            [
-                'name' => 'Super Admin',
-                'password' => 'password',
-                'is_super_admin' => true,
-            ]
-        );
+        $name = $this->ask('Admin name', 'Super Admin');
+        $email = $this->ask('Admin email', 'admin@vumacloud.com');
+        $password = $this->secret('Admin password (min 8 characters)');
 
-        $this->info('  ✓ Super admin created');
-    }
+        if (strlen($password) < 8) {
+            $this->error('Password must be at least 8 characters');
+            return;
+        }
 
-    protected function createDemoShop(): void
-    {
-        $this->info('Creating demo shop...');
+        SuperAdmin::create([
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make($password),
+            'is_active' => true,
+        ]);
 
-        $plan = Plan::where('slug', 'professional')->first();
-
-        $tenant = Tenant::updateOrCreate(
-            ['domain' => 'demoshop.vumacloud.com'],
-            [
-                'name' => 'VumaShops Demo Store',
-                'slug' => 'demo-shop',
-                'email' => 'demo@vumacloud.com',
-                'phone' => '+254700000000',
-                'plan_id' => $plan?->id,
-                'country' => 'KE',
-                'currency' => 'KES',
-                'timezone' => 'Africa/Nairobi',
-                'theme' => 'starter',
-                'is_active' => true,
-                'domain_verified' => true,
-                'subscription_status' => 'active',
-                'subscription_ends_at' => now()->addYear(),
-                'settings' => [
-                    'store_name' => 'VumaShops Demo',
-                    'store_description' => 'Experience the power of VumaShops',
-                    'whatsapp' => '+254700000000',
-                ],
-            ]
-        );
-
-        // Create demo store admin
-        Admin::updateOrCreate(
-            ['email' => 'demo@vumacloud.com', 'tenant_id' => $tenant->id],
-            [
-                'name' => 'Demo Store Admin',
-                'password' => 'demo123',
-                'is_super_admin' => false,
-            ]
-        );
-
-        $this->info('  ✓ Demo shop created at demoshop.vumacloud.com');
+        $this->info("Super admin created: {$email}");
     }
 }

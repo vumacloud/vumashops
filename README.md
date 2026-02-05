@@ -1,223 +1,389 @@
-# VumaShops by VumaCloud
+# VumaShops - Bagisto Hosting Platform
 
-**VumaShops** is a multi-tenant e-commerce platform built for African businesses by **VumaCloud**. Simple, affordable, and designed for WhatsApp sellers and small businesses ready to go online.
+A multi-tenant e-commerce hosting platform for African businesses. VumaShops provisions and manages [Bagisto](https://bagisto.com) stores with automatic SSL, WHMCS integration, and African payment gateways.
 
-**Platform:** [https://shops.vumacloud.com](https://shops.vumacloud.com)
-**Demo Store:** [https://demoshop.vumacloud.com](https://demoshop.vumacloud.com)
-**Corporate Site:** [https://vumacloud.com](https://vumacloud.com) (separate)
+## Architecture Overview
 
----
+```
+                    ┌─────────────────────────────────────────────────────────────┐
+                    │                 VumaShops Central Platform                  │
+                    │               (shops.vumacloud.com/admin)                   │
+                    ├─────────────────────────────────────────────────────────────┤
+                    │  - Filament 3 Super Admin Panel                             │
+                    │  - Tenant Management (CRUD)                                 │
+                    │  - WHMCS Provisioning API                                   │
+                    │  - BagistoProvisioner Service                               │
+                    │  - SSL/Domain Management (Let's Encrypt)                    │
+                    │  - Nginx Configuration Generator                            │
+                    │  - Central MySQL Database (tenant metadata)                 │
+                    └─────────────────────────────────────────────────────────────┘
+                                                  │
+                                                  │ Provisions per tenant
+                                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                           Per-Tenant Bagisto Installation                                 │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│  Location: /var/www/tenants/{tenant-uuid}/                                               │
+│                                                                                          │
+│  Components:                                                                             │
+│  - Full Bagisto e-commerce platform (2.3.0)                                              │
+│  - GraphQL API via bagisto/headless-ecommerce                                            │
+│  - Storefront: Bagisto default / Next.js (bagisto/nextjs-commerce) / Nuxt               │
+│  - Dedicated MySQL database (bagisto_{tenant_id})                                        │
+│  - Custom domain with Let's Encrypt SSL                                                  │
+│  - Independent admin panel at /admin                                                     │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Features
 
-### Payment Gateways (Africa-focused)
-Each vendor configures their own payment credentials in their dashboard:
-- **M-Pesa Kenya** - Safaricom Daraja API
-- **M-Pesa Tanzania** - Vodacom
-- **MTN Mobile Money** - Uganda, Ghana, Rwanda, Zambia
-- **Airtel Money** - Uganda, Kenya, Tanzania, Rwanda
-- **Paystack** - Cards (Nigeria, Ghana, South Africa, Kenya)
-- **Flutterwave** - Cards (10+ African countries)
+### Central Platform
+- **Filament 3 Admin Panel** - Manage all tenants, plans, and subscriptions
+- **WHMCS Integration** - Automated provisioning from billing system
+- **SSL Automation** - Let's Encrypt certificates with auto-renewal
+- **Nginx Management** - Per-tenant virtual host configurations
+- **Multi-database Architecture** - Uses stancl/tenancy for domain routing
 
-### Notifications
-- **Email via Brevo SMTP** - Order confirmations, shipping updates
-- **SMS via Africa's Talking** - Payment receipts, delivery alerts
-
-### Store Themes
-Vendors choose their theme from the dashboard:
-- Starter, Minimal, WhatsApp Commerce
-- Modern, Boutique, TechStore, FreshMart, AfroStyle
-- Custom CSS (Pro plans)
+### Each Tenant Gets
+- **Full Bagisto Installation** - Complete open-source e-commerce platform
+- **GraphQL API** - Via bagisto/headless-ecommerce for headless storefronts
+- **Multiple Storefronts** - Bagisto default, Next.js, or Nuxt
+- **Custom Domain** - With automatic Let's Encrypt SSL
+- **Isolated Database** - Complete data separation
+- **African Payment Gateways** - M-Pesa, Paystack, Flutterwave, MTN MoMo
 
 ---
 
-## Architecture
+## Server Requirements
 
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Ubuntu | 22.04 or 24.04 LTS | Recommended |
+| PHP | 8.3+ | With required extensions |
+| MySQL | 8.0+ | DigitalOcean Managed recommended |
+| Redis | 6+ | DigitalOcean Managed recommended |
+| Nginx | Latest | For reverse proxy |
+| Composer | 2.x | PHP package manager |
+| Node.js | 20+ | For Next.js/Nuxt storefronts |
+| Certbot | Latest | For Let's Encrypt |
+| Git | Latest | For deployments |
+
+### Required PHP Extensions
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Cloudflare                        │
-│                 (DNS + CDN + SSL)                    │
-└─────────────────────────┬───────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│           DigitalOcean Droplet                       │
-│              164.92.184.13                           │
-│         shops.vumacloud.com                          │
-│         demoshop.vumacloud.com                       │
-│         + all vendor custom domains                  │
-└─────────────────────────┬───────────────────────────┘
-                          │
-          ┌───────────────┴───────────────┐
-          │                               │
-┌─────────▼─────────┐         ┌──────────▼──────────┐
-│  DO Managed DB    │         │      Redis          │
-│     (MySQL 8)     │         │                     │
-└───────────────────┘         └─────────────────────┘
+bcmath, ctype, curl, dom, fileinfo, gd, iconv, intl, json, mbstring,
+openssl, pdo, pdo_mysql, redis, tokenizer, xml, zip
 ```
-
-### Domain Structure
-| Domain | Purpose |
-|--------|---------|
-| `shops.vumacloud.com` | Platform, API, Dashboard, Admin Panel |
-| `demoshop.vumacloud.com` | Demo store showcase |
-| `vumacloud.com` | Corporate website (separate, not this app) |
-| `vendor-domain.com` | Vendor stores (custom domains only) |
-
-**Important:** Vendors always use their own custom domains. No vumacloud.com subdomains for vendor stores.
 
 ---
 
-## Server Deployment
+## Step-by-Step Installation
 
-### Prerequisites
+### Step 1: Server Preparation
 
 ```bash
 # Update system
-apt update && apt upgrade -y
+sudo apt update && sudo apt upgrade -y
 
-# Install required packages
-# Note: No redis-server needed - we use DigitalOcean Managed Redis
-apt install -y nginx mysql-client supervisor certbot python3-certbot-nginx \
-    php8.3-fpm php8.3-cli php8.3-mysql php8.3-mbstring php8.3-xml php8.3-curl \
-    php8.3-zip php8.3-gd php8.3-intl php8.3-bcmath php8.3-redis
+# Install PHP 8.3 and extensions
+sudo add-apt-repository ppa:ondrej/php -y
+sudo apt install -y php8.3 php8.3-fpm php8.3-cli php8.3-common \
+    php8.3-mysql php8.3-zip php8.3-gd php8.3-mbstring php8.3-curl \
+    php8.3-xml php8.3-bcmath php8.3-intl php8.3-redis php8.3-soap
 
-# Install Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt install -y nodejs
+# Install Nginx
+sudo apt install -y nginx
+
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
 
 # Install Composer
-curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/local/bin/composer
+
+# Install Node.js 20 (for storefronts)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Create directories
+sudo mkdir -p /var/www/vumashops
+sudo mkdir -p /var/www/tenants
+sudo mkdir -p /var/www/certbot/.well-known/acme-challenge
+sudo chown -R www-data:www-data /var/www
 ```
 
-### Step 1: Clone and Setup Application
+### Step 2: Clone Repository
 
 ```bash
-# Create web directory
-mkdir -p /var/www
 cd /var/www
-
-# Clone repository
-git clone https://github.com/vumacloud/vumashops.git
+sudo git clone https://github.com/vumacloud/vumashops.git
 cd vumashops
-
-# Create required directories FIRST
-mkdir -p storage/framework/{cache/data,sessions,views}
-mkdir -p storage/{app/public,logs}
-mkdir -p bootstrap/cache
-
-# Set permissions
-chown -R www-data:www-data storage bootstrap/cache
-chmod -R 775 storage bootstrap/cache
-
-# Create log files
-touch storage/logs/laravel.log
-chown www-data:www-data storage/logs/laravel.log
-
-# Install dependencies
-composer install --optimize-autoloader --no-dev
-npm install && npm run build
-
-# Setup environment
-cp .env.example .env
-nano .env  # Edit with your credentials (see Environment Variables section)
-
-# Generate key and run migrations
-php artisan key:generate
-php artisan migrate --force
-php artisan db:seed --force
-php artisan storage:link
-php artisan optimize
+sudo chown -R www-data:www-data .
 ```
 
-### Step 2: Configure Nginx (WITHOUT SSL first)
-
-Create a temporary nginx config without SSL:
+### Step 3: Install PHP Dependencies
 
 ```bash
-cat > /etc/nginx/sites-available/vumashops.conf << 'EOF'
-# Temporary config - HTTP only (for certbot)
+sudo -u www-data composer install --no-dev --optimize-autoloader
+```
+
+### Step 4: Configure Environment
+
+```bash
+# Copy environment file
+sudo -u www-data cp .env.example .env
+
+# Generate application key
+sudo -u www-data php artisan key:generate
+
+# Edit environment file with your settings
+sudo nano .env
+```
+
+**Required Environment Variables:**
+
+```env
+# Application
+APP_NAME=VumaShops
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://shops.vumacloud.com
+
+# Database (DigitalOcean Managed MySQL)
+DB_CONNECTION=central
+DB_HOST=your-db-cluster.db.ondigitalocean.com
+DB_PORT=25060
+DB_DATABASE=vumashops_central
+DB_USERNAME=doadmin
+DB_PASSWORD=your-secure-password
+MYSQL_ATTR_SSL_CA=/etc/ssl/certs/ca-certificates.crt
+
+# Redis (DigitalOcean Managed Redis)
+REDIS_HOST=your-redis.db.ondigitalocean.com
+REDIS_PASSWORD=your-redis-password
+REDIS_PORT=25061
+REDIS_SCHEME=tls
+
+# Session/Cache
+SESSION_DRIVER=redis
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+
+# WHMCS Integration
+WHMCS_API_KEY=generate-a-secure-random-key
+
+# Server Configuration
+SERVER_IP=your-server-public-ip
+LETSENCRYPT_EMAIL=admin@yourdomain.com
+```
+
+### Step 5: Create Database
+
+Connect to your MySQL server and create the central database:
+
+```sql
+CREATE DATABASE vumashops_central CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### Step 6: Run Platform Setup
+
+```bash
+# Run migrations and seed plans
+sudo -u www-data php artisan vumashops:setup --seed
+```
+
+This command will:
+1. Run all database migrations
+2. Create default plans (Starter, Business, Enterprise)
+3. Prompt you to create a super admin account
+
+**Save your super admin credentials securely!**
+
+### Step 7: Configure Nginx for Central Platform
+
+Create the Nginx configuration:
+
+```bash
+sudo nano /etc/nginx/sites-available/shops.vumacloud.com.conf
+```
+
+Paste this configuration:
+
+```nginx
+# VumaShops Central Platform
 server {
     listen 80;
-    server_name shops.vumacloud.com demoshop.vumacloud.com;
-    root /var/www/vumashops/public;
-    index index.php;
+    listen [::]:80;
+    server_name shops.vumacloud.com;
 
+    root /var/www/vumashops/public;
+    index index.php index.html;
+
+    # Let's Encrypt challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Laravel/Filament
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
     location ~ \.php$ {
         fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         include fastcgi_params;
+        fastcgi_read_timeout 300;
     }
 
     location ~ /\.(?!well-known).* {
         deny all;
     }
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    client_max_body_size 50M;
 }
-EOF
-
-ln -sf /etc/nginx/sites-available/vumashops.conf /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl restart nginx
 ```
 
-### Step 3: Obtain SSL Certificates
+Enable and test:
 
 ```bash
-# Get certificates for platform domains
-certbot --nginx -d shops.vumacloud.com -d demoshop.vumacloud.com
-
-# Certbot will automatically update nginx config with SSL
+sudo ln -s /etc/nginx/sites-available/shops.vumacloud.com.conf /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-### Step 4: Setup Cloudflare Origin Certificate for Vendor Domains
+### Step 8: Point DNS to Server
 
-Vendor stores use custom domains proxied through Cloudflare. Create an Origin Certificate:
+Add an A record for your domain pointing to your server's IP:
 
-1. **In Cloudflare Dashboard:**
-   - Go to SSL/TLS → Origin Server → Create Certificate
-   - Private key type: RSA (2048)
-   - Hostnames: `*` (wildcard - covers all vendor domains)
-   - Validity: 15 years
-   - Click Create
-
-2. **Install the certificate on your server:**
-
-```bash
-# Create the certificate file (paste from Cloudflare)
-nano /etc/ssl/certs/cloudflare-origin.pem
-# Paste the Origin Certificate, save and exit
-
-# Create the private key file (paste from Cloudflare)
-nano /etc/ssl/private/cloudflare-origin.key
-# Paste the Private Key, save and exit
-
-# Set proper permissions
-chmod 644 /etc/ssl/certs/cloudflare-origin.pem
-chmod 600 /etc/ssl/private/cloudflare-origin.key
+```
+shops.vumacloud.com  A  164.92.184.13
 ```
 
-**Note:** This Origin Certificate is used for encrypted communication between Cloudflare and your server. Cloudflare handles the public-facing SSL for vendor domains.
+Wait for DNS propagation (can take up to 48 hours, usually much faster).
 
-### Step 5: Update Nginx for Production + Vendor Domains
-
-After SSL certificates are configured, update nginx for full production setup:
+### Step 9: Issue SSL Certificate for Central Platform
 
 ```bash
-# Copy the full production config
-cp /var/www/vumashops/deployment/nginx/vumashops.conf /etc/nginx/sites-available/
-
-# Test and reload
-nginx -t && systemctl reload nginx
+sudo certbot certonly --webroot -w /var/www/certbot -d shops.vumacloud.com
 ```
 
-### Step 6: Setup Queue Workers
+Update Nginx config to use HTTPS:
 
 ```bash
-cat > /etc/supervisor/conf.d/vumashops.conf << 'EOF'
+sudo nano /etc/nginx/sites-available/shops.vumacloud.com.conf
+```
+
+Replace with:
+
+```nginx
+# HTTP -> HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name shops.vumacloud.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name shops.vumacloud.com;
+
+    root /var/www/vumashops/public;
+    index index.php index.html;
+
+    # SSL certificates
+    ssl_certificate /etc/letsencrypt/live/shops.vumacloud.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/shops.vumacloud.com/privkey.pem;
+
+    # SSL settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # Security headers
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # Laravel/Filament
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_read_timeout 300;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    client_max_body_size 50M;
+}
+```
+
+Reload Nginx:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Step 10: Set Up Cron Jobs
+
+```bash
+sudo crontab -e
+```
+
+Add these lines:
+
+```cron
+# Laravel scheduler (runs every minute)
+* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1
+
+# SSL certificate renewal check (daily at 3am)
+0 3 * * * cd /var/www/vumashops && php artisan ssl:renew >> /var/log/vumashops-ssl.log 2>&1
+
+# Queue worker restart (weekly)
+0 0 * * 0 cd /var/www/vumashops && php artisan queue:restart >> /dev/null 2>&1
+```
+
+### Step 11: Set Up Queue Worker (Supervisor)
+
+Install Supervisor:
+
+```bash
+sudo apt install -y supervisor
+```
+
+Create worker configuration:
+
+```bash
+sudo nano /etc/supervisor/conf.d/vumashops-worker.conf
+```
+
+```ini
 [program:vumashops-worker]
 process_name=%(program_name)s_%(process_num)02d
 command=php /var/www/vumashops/artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
@@ -226,242 +392,286 @@ autorestart=true
 stopasgroup=true
 killasgroup=true
 user=www-data
-numprocs=4
+numprocs=2
 redirect_stderr=true
-stdout_logfile=/var/www/vumashops/storage/logs/worker.log
+stdout_logfile=/var/log/vumashops-worker.log
 stopwaitsecs=3600
-EOF
-
-supervisorctl reread && supervisorctl update && supervisorctl start vumashops-worker:*
 ```
 
-### Step 7: Setup Cron
+Start the workers:
 
 ```bash
-(crontab -l 2>/dev/null; echo "* * * * * cd /var/www/vumashops && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start vumashops-worker:*
 ```
 
-### Step 8: Verify Installation
+### Step 12: Set Permissions
 
 ```bash
-# Check Laravel
-php artisan --version
+sudo chown -R www-data:www-data /var/www/vumashops
+sudo chown -R www-data:www-data /var/www/tenants
+sudo chmod -R 775 /var/www/vumashops/storage
+sudo chmod -R 775 /var/www/vumashops/bootstrap/cache
+```
 
-# Check routes
-php artisan route:list --path=whmcs
+### Step 13: Optimize for Production
 
-# Test health endpoint
-curl -s http://localhost/api/health | jq
+```bash
+cd /var/www/vumashops
+sudo -u www-data php artisan optimize
+sudo -u www-data php artisan view:cache
+sudo -u www-data php artisan route:cache
+sudo -u www-data php artisan config:cache
 ```
 
 ---
 
-## Environment Variables
+## Accessing the Admin Panel
 
-Key variables in `.env`:
+After installation, access the Filament admin panel at:
 
-```env
-APP_NAME=VumaShops
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://shops.vumacloud.com
-
-# DigitalOcean Managed MySQL
-DB_CONNECTION=mysql
-DB_HOST=your-db-cluster-do-user-xxxxx-0.db.ondigitalocean.com
-DB_PORT=25060
-DB_DATABASE=vumashops
-DB_USERNAME=doadmin
-DB_PASSWORD=your-password
-MYSQL_ATTR_SSL_CA=/etc/ssl/certs/ca-certificates.crt
-
-# DigitalOcean Managed Redis (TLS on port 25061)
-REDIS_CLIENT=phpredis
-REDIS_HOST=your-redis-cluster-do-user-xxxxx-0.db.ondigitalocean.com
-REDIS_USERNAME=default
-REDIS_PASSWORD=your-redis-password
-REDIS_PORT=25061
-REDIS_SCHEME=tls
-
-# Use Redis for session, cache, and queue in production
-SESSION_DRIVER=redis
-CACHE_STORE=redis
-QUEUE_CONNECTION=redis
-
-# DigitalOcean Spaces (for vendor product images)
-FILESYSTEM_DISK=do_spaces
-DO_SPACES_KEY=your-spaces-access-key
-DO_SPACES_SECRET=your-spaces-secret-key
-DO_SPACES_REGION=fra1
-DO_SPACES_BUCKET=vumashops
-DO_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
-DO_SPACES_CDN_ENDPOINT=https://vumashops.fra1.cdn.digitaloceanspaces.com
-
-# Domain config
-VUMASHOPS_PLATFORM_DOMAIN=shops.vumacloud.com
-VUMASHOPS_DEMO_DOMAIN=demoshop.vumacloud.com
-VUMASHOPS_SERVER_IP=164.92.184.13
-# NOTE: demoshop.vumacloud.com is a TENANT, not a central domain
-TENANCY_CENTRAL_DOMAINS=shops.vumacloud.com
-
-# Cloudflare (for vendor domain automation)
-CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
-CLOUDFLARE_ZONE_ID=your-zone-id
-CLOUDFLARE_SERVER_IP=164.92.184.13
-
-# Brevo SMTP (platform emails)
-MAIL_MAILER=smtp
-MAIL_HOST=smtp-relay.brevo.com
-MAIL_PORT=587
-MAIL_USERNAME=your-brevo-smtp-login
-MAIL_PASSWORD=your-brevo-smtp-password
-MAIL_ENCRYPTION=tls
-MAIL_FROM_ADDRESS=noreply@vumacloud.com
-MAIL_FROM_NAME=VumaShops
-
-# Africa's Talking (platform SMS)
-AFRICASTALKING_USERNAME=your-username
-AFRICASTALKING_API_KEY=your-api-key
-AFRICASTALKING_FROM=VumaShops
-
-# WHMCS Integration
-WHMCS_API_KEY=your-secure-random-api-key
-WHMCS_URL=https://billing.vumacloud.com
+```
+https://shops.vumacloud.com/admin
 ```
 
-**Note:** Payment gateway credentials (Paystack, Flutterwave, M-Pesa, etc.) are configured per-vendor in their dashboard, NOT in .env.
+Login with the super admin credentials you created during setup.
 
 ---
 
-## DigitalOcean Infrastructure Setup
+## Manual Tenant Provisioning
 
-### 1. Managed MySQL Database
-- Create Database Cluster → MySQL 8
-- Get connection details from cluster overview
-- Use port `25060` with SSL
+To manually provision a tenant (for testing):
 
-### 2. Managed Redis
-- Create Database Cluster → Redis 7
-- Use port `25061` with TLS (`REDIS_SCHEME=tls`)
-- Provides HA, auto-failover, managed backups
+```bash
+cd /var/www/vumashops
 
-### 3. Spaces (Object Storage)
-- Create Space: `vumashops`
-- Enable CDN for faster asset delivery
-- Generate Spaces access keys (API → Spaces Keys)
-- All vendor product images stored here (scalable, no disk limits)
+php artisan tenant:provision \
+    --name="Demo Shop" \
+    --email="demo@example.com" \
+    --domain="demoshop.vumacloud.com" \
+    --plan="business" \
+    --password="SecurePassword123!"
+```
+
+This will:
+1. Create the tenant record in central database
+2. Generate Nginx configuration
+3. Install Bagisto with GraphQL API
+4. Attempt SSL certificate issuance (if DNS is ready)
 
 ---
 
 ## WHMCS Integration
 
-WHMCS handles billing and provisioning. Configure these endpoints in your WHMCS module:
+### API Endpoints
 
-| Action | Endpoint | Method |
-|--------|----------|--------|
-| Create Account | `/api/whmcs/create` | POST |
-| Suspend | `/api/whmcs/suspend` | POST |
-| Unsuspend | `/api/whmcs/unsuspend` | POST |
-| Terminate | `/api/whmcs/terminate` | POST |
-| Change Plan | `/api/whmcs/change-plan` | POST |
-| Renew | `/api/whmcs/renew` | POST |
-| Get Status | `/api/whmcs/status` | POST/GET |
+All endpoints require `X-WHMCS-API-Key` header with the value from `WHMCS_API_KEY` env.
 
-All endpoints require `Authorization: Bearer {WHMCS_API_KEY}` header.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/whmcs/create` | POST | Create new tenant with Bagisto |
+| `/api/whmcs/suspend` | POST | Suspend tenant (maintenance mode) |
+| `/api/whmcs/unsuspend` | POST | Unsuspend tenant |
+| `/api/whmcs/terminate` | POST | Delete tenant completely |
+| `/api/whmcs/change-plan` | POST | Change subscription plan |
+| `/api/whmcs/status` | GET | Get tenant status and URLs |
 
-### Create Account Parameters
-```json
-{
-    "serviceid": "12345",
-    "clientid": "67890",
+### Create Tenant Request
+
+```bash
+curl -X POST https://shops.vumacloud.com/api/whmcs/create \
+  -H "X-WHMCS-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service_id": 123,
+    "client_id": 456,
     "domain": "mystore.com",
     "email": "owner@mystore.com",
-    "password": "optional-or-generated",
-    "firstname": "John",
-    "lastname": "Doe",
-    "plan": "starter"
+    "name": "My Store",
+    "plan": "business",
+    "country": "KE",
+    "storefront_type": "bagisto_default"
+  }'
+```
+
+### Response
+
+```json
+{
+  "result": "success",
+  "message": "Store created successfully",
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "domain": "mystore.com",
+  "admin_url": "https://mystore.com/admin",
+  "api_url": "https://mystore.com/graphql",
+  "storefront_url": "https://mystore.com"
 }
+```
+
+### Suspend Tenant
+
+```bash
+curl -X POST https://shops.vumacloud.com/api/whmcs/suspend \
+  -H "X-WHMCS-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"service_id": 123, "reason": "Payment overdue"}'
+```
+
+### Terminate Tenant
+
+```bash
+curl -X POST https://shops.vumacloud.com/api/whmcs/terminate \
+  -H "X-WHMCS-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"service_id": 123}'
 ```
 
 ---
 
-## Default Credentials
+## Directory Structure
 
-**Super Admin:** `https://shops.vumacloud.com/super-admin`
-- Email: `admin@vumacloud.com`
-- Password: `password`
+```
+/var/www/vumashops/                 # Central platform
+├── app/
+│   ├── Console/Commands/           # Artisan commands
+│   │   ├── SetupPlatform.php       # php artisan vumashops:setup
+│   │   ├── ProvisionTenant.php     # php artisan tenant:provision
+│   │   └── RenewSslCertificates.php # php artisan ssl:renew
+│   ├── Filament/Admin/             # Filament admin panel
+│   │   └── Resources/
+│   │       ├── TenantResource.php  # Tenant CRUD
+│   │       └── PlanResource.php    # Plan CRUD
+│   ├── Http/Controllers/Api/
+│   │   └── WhmcsProvisioningController.php
+│   ├── Models/
+│   │   ├── Tenant.php              # Tenant model
+│   │   ├── Plan.php                # Subscription plans
+│   │   └── SuperAdmin.php          # Admin users
+│   └── Services/
+│       ├── BagistoProvisioner.php  # Installs Bagisto
+│       ├── SslManager.php          # Let's Encrypt automation
+│       └── NginxConfigGenerator.php # Nginx configs
+├── config/
+│   ├── tenancy.php                 # stancl/tenancy config
+│   ├── database.php                # Central & tenant connections
+│   └── services.php                # WHMCS, server, SSL config
+├── database/
+│   └── migrations/                 # Central database only
+└── routes/
+    └── api.php                     # WHMCS API routes
 
-**Demo Store:** `https://demoshop.vumacloud.com/admin`
-- Email: `demo@vumacloud.com`
-- Password: `demo123`
-
-⚠️ **Change these immediately in production!**
+/var/www/tenants/                   # Tenant installations
+└── {tenant-uuid}/                  # Each tenant's Bagisto
+    ├── app/
+    ├── config/
+    ├── public/                     # Nginx document root
+    ├── storage/
+    └── .env                        # Tenant-specific config
+```
 
 ---
 
-## Vendor Dashboard
+## Artisan Commands
 
-Each vendor configures in their dashboard (`https://their-domain.com/admin`):
-
-- **Store Settings:** Name, logo, favicon, description
-- **Theme:** Select from available themes
-- **Payment Gateways:** Their own Paystack/Flutterwave/M-Pesa credentials
-- **Notifications:** Email templates, SMS settings
-- **Products:** Add/manage products
-- **Orders:** View and manage orders
-
----
-
-## Supported Countries
-
-| Country | Currency | Payment Methods |
-|---------|----------|-----------------|
-| Kenya | KES | M-Pesa, Paystack, Flutterwave |
-| Tanzania | TZS | M-Pesa TZ, Airtel Money, Flutterwave |
-| Uganda | UGX | MTN MoMo, Airtel Money, Flutterwave |
-| Nigeria | NGN | Paystack, Flutterwave |
-| Ghana | GHS | Paystack, MTN MoMo, Flutterwave |
-| South Africa | ZAR | Paystack, Flutterwave |
-| Rwanda | RWF | MTN MoMo, Flutterwave |
-| Zambia | ZMW | MTN MoMo, Airtel Money |
+| Command | Description |
+|---------|-------------|
+| `php artisan vumashops:setup --seed` | Initial platform setup |
+| `php artisan tenant:provision` | Manually provision a tenant |
+| `php artisan ssl:renew` | Renew expiring SSL certificates |
+| `php artisan optimize` | Cache config/routes/views |
+| `php artisan queue:work` | Process background jobs |
 
 ---
 
 ## Troubleshooting
 
-### Permission Issues
-```bash
-chown -R www-data:www-data /var/www/vumashops/storage /var/www/vumashops/bootstrap/cache
-chmod -R 775 /var/www/vumashops/storage /var/www/vumashops/bootstrap/cache
-```
+### Bagisto Installation Fails
 
-### Clear Caches
-```bash
-php artisan config:clear
-php artisan cache:clear
-php artisan view:clear
-php artisan route:clear
-php artisan optimize
-```
-
-### Check Logs
+Check the Laravel log:
 ```bash
 tail -f /var/www/vumashops/storage/logs/laravel.log
-tail -f /var/log/nginx/error.log
 ```
 
-### Queue Issues
+Common issues:
+- **Composer timeout**: Increase timeout in BagistoProvisioner.php
+- **Memory limit**: Edit `/etc/php/8.3/cli/php.ini` and set `memory_limit = 512M`
+- **Disk space**: Ensure at least 2GB free per tenant
+
+### SSL Certificate Fails
+
+1. Verify DNS is pointing to your server:
 ```bash
-supervisorctl status
-supervisorctl restart vumashops-worker:*
+dig +short mystore.com
 ```
+
+2. Check certbot logs:
+```bash
+sudo tail -f /var/log/letsencrypt/letsencrypt.log
+```
+
+3. Manually issue certificate:
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot -d mystore.com
+```
+
+### Nginx Config Issues
+
+Test configuration:
+```bash
+sudo nginx -t
+```
+
+Check error log:
+```bash
+sudo tail -f /var/log/nginx/error.log
+```
+
+### Queue Jobs Not Processing
+
+Restart supervisor:
+```bash
+sudo supervisorctl restart vumashops-worker:*
+```
+
+Check worker logs:
+```bash
+tail -f /var/log/vumashops-worker.log
+```
+
+---
+
+## African Payment Gateways
+
+Each Bagisto tenant can configure these payment gateways via their admin panel:
+
+| Gateway | Countries | Package |
+|---------|-----------|---------|
+| Paystack | Nigeria, Ghana, Kenya, South Africa | bagisto/paystack |
+| Flutterwave | 30+ African countries | bagisto/flutterwave |
+| M-Pesa | Kenya, Tanzania | Custom integration |
+| MTN MoMo | Uganda, Ghana, Cameroon | Custom integration |
+| Airtel Money | Multiple African countries | Custom integration |
+
+---
+
+## Security Recommendations
+
+1. **Firewall**: Only allow ports 22, 80, 443
+2. **SSH**: Use key-based authentication, disable password login
+3. **WHMCS API Key**: Generate a strong random key (32+ characters)
+4. **Database**: Use managed database with SSL
+5. **Backups**: Enable automatic database backups
+6. **Updates**: Keep system and packages updated
+
+---
+
+## Support
+
+For issues, please open a GitHub issue or contact support@vumacloud.com.
 
 ---
 
 ## License
 
-Proprietary software by VumaCloud. All rights reserved.
-
----
-
-Built for African businesses by **VumaCloud**.
+MIT License - See LICENSE file for details.

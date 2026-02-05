@@ -2,30 +2,30 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Facades\Crypt;
 
 class TenantPaymentGateway extends Model
 {
-    use HasFactory;
+    protected $connection = 'central';
 
     protected $fillable = [
         'tenant_id',
         'gateway',
-        'is_enabled',
-        'is_test_mode',
+        'display_name',
         'credentials',
+        'is_active',
+        'is_test_mode',
+        'supported_currencies',
         'settings',
-        'sort_order',
     ];
 
     protected $casts = [
-        'is_enabled' => 'boolean',
+        'is_active' => 'boolean',
         'is_test_mode' => 'boolean',
+        'supported_currencies' => 'array',
         'settings' => 'array',
-        'sort_order' => 'integer',
     ];
 
     protected $hidden = [
@@ -33,110 +33,68 @@ class TenantPaymentGateway extends Model
     ];
 
     /**
-     * Available payment gateways.
+     * Available payment gateways
      */
     public const GATEWAYS = [
-        'paystack' => [
-            'name' => 'Paystack',
-            'description' => 'Accept card payments (Nigeria, Ghana, South Africa, Kenya)',
-            'credentials_schema' => ['public_key', 'secret_key'],
-            'countries' => ['NG', 'GH', 'ZA', 'KE'],
-        ],
-        'flutterwave' => [
-            'name' => 'Flutterwave',
-            'description' => 'Accept card and mobile money payments across Africa',
-            'credentials_schema' => ['public_key', 'secret_key', 'encryption_key'],
-            'countries' => ['NG', 'GH', 'KE', 'ZA', 'TZ', 'UG', 'RW', 'ZM'],
-        ],
-        'mpesa_kenya' => [
-            'name' => 'M-Pesa Kenya',
-            'description' => 'Safaricom M-Pesa (Kenya)',
-            'credentials_schema' => ['consumer_key', 'consumer_secret', 'shortcode', 'passkey', 'initiator_name', 'initiator_password'],
-            'countries' => ['KE'],
-        ],
-        'mpesa_tanzania' => [
-            'name' => 'M-Pesa Tanzania',
-            'description' => 'Vodacom M-Pesa (Tanzania)',
-            'credentials_schema' => ['api_key', 'public_key', 'service_provider_code'],
-            'countries' => ['TZ'],
-        ],
-        'mtn_momo' => [
-            'name' => 'MTN Mobile Money',
-            'description' => 'MTN MoMo (Uganda, Ghana, Rwanda, Zambia)',
-            'credentials_schema' => ['collection_subscription_key', 'collection_api_user', 'collection_api_key'],
-            'countries' => ['UG', 'GH', 'RW', 'ZM'],
-        ],
-        'airtel_money' => [
-            'name' => 'Airtel Money',
-            'description' => 'Airtel Money (Uganda, Kenya, Tanzania, Rwanda)',
-            'credentials_schema' => ['client_id', 'client_secret'],
-            'countries' => ['UG', 'KE', 'TZ', 'RW'],
-        ],
+        'paystack' => 'Paystack',
+        'flutterwave' => 'Flutterwave',
+        'mpesa' => 'M-Pesa (Kenya)',
+        'mtn_momo' => 'MTN Mobile Money',
+        'airtel_money' => 'Airtel Money',
+        'stripe' => 'Stripe',
+        'paypal' => 'PayPal',
     ];
 
-    public function tenant(): BelongsTo
+    /**
+     * Gateway credential requirements
+     */
+    public const GATEWAY_CREDENTIALS = [
+        'paystack' => ['public_key', 'secret_key'],
+        'flutterwave' => ['public_key', 'secret_key', 'encryption_key'],
+        'mpesa' => ['consumer_key', 'consumer_secret', 'passkey', 'shortcode', 'initiator_name', 'initiator_password'],
+        'mtn_momo' => ['subscription_key', 'api_user', 'api_key', 'callback_url'],
+        'airtel_money' => ['client_id', 'client_secret'],
+        'stripe' => ['publishable_key', 'secret_key', 'webhook_secret'],
+        'paypal' => ['client_id', 'client_secret'],
+    ];
+
+    /**
+     * Get the tenant that owns this gateway
+     */
+    public function tenant()
     {
         return $this->belongsTo(Tenant::class);
     }
 
     /**
-     * Set credentials (encrypted).
+     * Encrypt credentials when setting
      */
-    public function setCredentialsAttribute($value): void
+    protected function credentials(): Attribute
     {
-        if (is_array($value)) {
-            $value = json_encode($value);
-        }
-        $this->attributes['credentials'] = Crypt::encryptString($value);
+        return Attribute::make(
+            get: fn ($value) => $value ? json_decode(Crypt::decryptString($value), true) : [],
+            set: fn ($value) => $value ? Crypt::encryptString(json_encode($value)) : null,
+        );
     }
 
     /**
-     * Get credentials (decrypted).
-     */
-    public function getCredentialsAttribute($value): ?array
-    {
-        if (empty($value)) {
-            return null;
-        }
-
-        try {
-            $decrypted = Crypt::decryptString($value);
-            return json_decode($decrypted, true);
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    /**
-     * Get a specific credential value.
+     * Get a specific credential
      */
     public function getCredential(string $key, $default = null)
     {
-        $credentials = $this->credentials;
-        return $credentials[$key] ?? $default;
+        return data_get($this->credentials, $key, $default);
     }
 
     /**
-     * Get a specific setting value.
-     */
-    public function getSetting(string $key, $default = null)
-    {
-        return data_get($this->settings, $key, $default);
-    }
-
-    /**
-     * Check if gateway is properly configured.
+     * Check if gateway is properly configured
      */
     public function isConfigured(): bool
     {
+        $required = self::GATEWAY_CREDENTIALS[$this->gateway] ?? [];
         $credentials = $this->credentials;
-        if (empty($credentials)) {
-            return false;
-        }
 
-        $schema = self::GATEWAYS[$this->gateway]['credentials_schema'] ?? [];
-        foreach ($schema as $field) {
-            if (empty($credentials[$field])) {
+        foreach ($required as $key) {
+            if (empty($credentials[$key])) {
                 return false;
             }
         }
@@ -145,39 +103,18 @@ class TenantPaymentGateway extends Model
     }
 
     /**
-     * Get gateway info.
+     * Get gateway display name
      */
-    public function getGatewayInfo(): array
+    public static function getGatewayName(string $gateway): string
     {
-        return self::GATEWAYS[$this->gateway] ?? [
-            'name' => ucfirst($this->gateway),
-            'description' => '',
-            'credentials_schema' => [],
-            'countries' => [],
-        ];
+        return self::GATEWAYS[$gateway] ?? $gateway;
     }
 
     /**
-     * Scope: only enabled gateways.
+     * Scope to only active gateways
      */
-    public function scopeEnabled($query)
+    public function scopeActive($query)
     {
-        return $query->where('is_enabled', true);
-    }
-
-    /**
-     * Scope: only configured gateways.
-     */
-    public function scopeConfigured($query)
-    {
-        return $query->whereNotNull('credentials');
-    }
-
-    /**
-     * Scope: ordered by sort order.
-     */
-    public function scopeOrdered($query)
-    {
-        return $query->orderBy('sort_order');
+        return $query->where('is_active', true);
     }
 }
