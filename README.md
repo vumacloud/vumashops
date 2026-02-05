@@ -401,10 +401,13 @@ stopwaitsecs=3600
 Start the workers:
 
 ```bash
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl start vumashops-worker:*
+# IMPORTANT: Run these commands in order
+sudo supervisorctl reread   # Read the new config file
+sudo supervisorctl update   # Add the new program to supervisor
+sudo supervisorctl start vumashops-worker:*  # Start the workers
 ```
+
+**Note:** If you get "ERROR (no such group)", it means you skipped `reread` and `update`. Run them first.
 
 ### Step 12: Set Permissions
 
@@ -629,7 +632,18 @@ sudo tail -f /var/log/nginx/error.log
 
 ### Queue Jobs Not Processing
 
-Restart supervisor:
+First, ensure supervisor knows about the workers:
+```bash
+sudo supervisorctl reread
+sudo supervisorctl update
+```
+
+Then check status:
+```bash
+sudo supervisorctl status
+```
+
+Restart workers:
 ```bash
 sudo supervisorctl restart vumashops-worker:*
 ```
@@ -637,6 +651,15 @@ sudo supervisorctl restart vumashops-worker:*
 Check worker logs:
 ```bash
 tail -f /var/log/vumashops-worker.log
+```
+
+### Supervisor "no such group" Error
+
+If you see `ERROR (no such group)`:
+```bash
+sudo supervisorctl reread   # Read config files
+sudo supervisorctl update   # Add new programs
+sudo supervisorctl start vumashops-worker:*  # Start workers
 ```
 
 ---

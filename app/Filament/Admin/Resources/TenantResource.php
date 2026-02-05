@@ -5,10 +5,14 @@ namespace App\Filament\Admin\Resources;
 use App\Filament\Admin\Resources\TenantResource\Pages;
 use App\Models\Plan;
 use App\Models\Tenant;
+use App\Services\BagistoProvisioner;
+use App\Services\NginxConfigGenerator;
+use App\Services\SslManager;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -41,6 +45,19 @@ class TenantResource extends Resource
                         Forms\Components\TextInput::make('phone')
                             ->tel()
                             ->maxLength(20),
+                        Forms\Components\TextInput::make('domain')
+                            ->label('Domain')
+                            ->placeholder('mystore.com')
+                            ->helperText('Custom domain for this store (point DNS A record to server first)')
+                            ->required()
+                            ->visibleOn('create'),
+                        Forms\Components\TextInput::make('admin_password')
+                            ->label('Admin Password')
+                            ->password()
+                            ->minLength(8)
+                            ->helperText('Password for Bagisto admin panel (min 8 chars)')
+                            ->required()
+                            ->visibleOn('create'),
                     ])
                     ->columns(2),
 
@@ -193,6 +210,51 @@ class TenantResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (Tenant $record) => $record->isSuspended())
                     ->action(fn (Tenant $record) => $record->unsuspend()),
+                Tables\Actions\Action::make('provision')
+                    ->label('Provision Bagisto')
+                    ->icon('heroicon-o-server-stack')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Provision Bagisto Installation')
+                    ->modalDescription('This will install a fresh Bagisto e-commerce platform for this tenant. This process may take several minutes.')
+                    ->form([
+                        Forms\Components\TextInput::make('admin_password')
+                            ->label('Admin Password')
+                            ->password()
+                            ->required()
+                            ->minLength(8)
+                            ->helperText('Password for Bagisto admin panel'),
+                    ])
+                    ->visible(fn (Tenant $record) => !$record->isBagistoInstalled() && $record->getPrimaryDomain())
+                    ->action(function (Tenant $record, array $data) {
+                        try {
+                            $provisioner = app(BagistoProvisioner::class);
+                            $nginxGenerator = app(NginxConfigGenerator::class);
+
+                            // Generate nginx config first
+                            $nginxGenerator->generate($record);
+
+                            // Provision Bagisto
+                            $provisioner->provision($record, [
+                                'admin_email' => $record->email,
+                                'admin_password' => $data['admin_password'],
+                                'storefront_type' => 'bagisto_default',
+                            ]);
+
+                            Notification::make()
+                                ->title('Bagisto Provisioned')
+                                ->body('Bagisto has been installed successfully for ' . $record->name)
+                                ->success()
+                                ->send();
+
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title('Provisioning Failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
